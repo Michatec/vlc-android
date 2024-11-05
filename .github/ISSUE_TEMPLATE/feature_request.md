@@ -1,20 +1,23 @@
----
-name: Feature request
-about: Suggest an idea for this project
-title: ''
-labels: ''
-assignees: ''
+<!--- Provide a general summary of the request in the Title above -->
 
----
+## Description
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+<!--- Describe your request in detail -->
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+#### Expected behavior
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+#### Screenshot / video
+
+<!--Add a screenshot or screencast when applicable-->
+<!--To take a screenshot, see https://support.google.com/android/answer/9075928?hl=en-->
+
+#### App mode
+
+<!--Remove the useless modes-->
+
+**Smartphone**
+
+**TV**
+
+**Auto**
