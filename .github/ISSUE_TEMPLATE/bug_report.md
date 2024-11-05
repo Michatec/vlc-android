@@ -1,38 +1,40 @@
----
-name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: ''
+<!--- Provide a general summary of the issue in the Title above -->
 
----
+## Description
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!--- Describe your bug in detail -->
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+#### Expected behavior
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+#### Actual behavior
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+#### Steps to reproduce
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+1.
+2.
+3.
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+#### Screenshot / video
 
-**Additional context**
-Add any other context about the problem here.
+<!--Add a screenshot or screencast when applicable-->
+<!--To take a screenshot, see https://support.google.com/android/answer/9075928?hl=en-->
+
+
+## Context
+
+#### App version
+
+<!--You can find it in the About screen of the app-->
+
+#### Android version
+
+#### Device model
+
+#### App mode
+
+<!--Remove the useless modes-->
+**Smartphone**
+
+**TV**
+
+**Auto**
