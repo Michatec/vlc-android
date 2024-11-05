@@ -37,8 +37,8 @@ jobs:
       # Run Tests Build
       - name: Install Tools
         run: sudo apt install automake ant autopoint cmake build-essential libtool-bin \
-             patch pkg-config protobuf-compiler ragel subversion unzip git \
-             openjdk-8-jre openjdk-8-jdk flex python3 python-is-python3 wget
+             pkg-config protobuf-compiler ragel subversion unzip git \
+             openjdk-8-jdk flex python3 python-is-python3 wget
 
       - name: Compile
         run: buildsystem/compile.sh -l -a all
