@@ -31,6 +31,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
@@ -128,6 +129,20 @@ class StartActivity : FragmentActivity() {
     }
 
     private fun resume() {
+        // if browse screen is unstable, revert back to the video screen
+
+        val preferences = Settings.getInstance(this)
+        if (preferences.getBoolean("navigator_screen_unstable", false)) {
+            Log.w(TAG, "Crash found in the browser!!!")
+            if (!BuildConfig.DEBUG) {
+                Log.w(TAG, "Reverting to the default screen")
+                preferences.edit(true) {
+                    remove("fragment_id")
+                    remove("navigator_screen_unstable")
+                }
+            }
+        }
+
         val intent = intent
         val action = intent?.action
 
@@ -142,7 +157,7 @@ class StartActivity : FragmentActivity() {
                 var uri: Uri? = FileUtils.getUri(item.uri)
                 if (uri == null && item.text != null) uri = item.text.toString().toUri()
                 if (uri != null) {
-                    MediaUtils.openMediaNoUi(uri)
+                    MediaUtils.openMediaNoUi(this, uri)
                     finish()
                     return
                 }
@@ -211,7 +226,7 @@ class StartActivity : FragmentActivity() {
                     }
                 }
             } else if(action != null && action== "vlc.remoteaccess.share") {
-                startActivity(Intent().apply { component = ComponentName(this@StartActivity, "org.videolan.vlc.webserver.gui.remoteaccess.RemoteAccessShareActivity") })
+                startActivity(Intent().apply { component = ComponentName(this@StartActivity, "org.videolan.vlc.remoteaccessserver.gui.remoteaccess.RemoteAccessShareActivity") })
             } else {
                 val target = idFromShortcut
                 val service = PlaybackService.instance
@@ -287,11 +302,17 @@ class StartActivity : FragmentActivity() {
                 startActivityForResult(intent.setClass(this@StartActivity, VideoPlayerActivity::class.java).apply { putExtra(VideoPlayerActivity.FROM_EXTERNAL, true) }, PROPAGATE_RESULT, Util.getFullScreenBundle())
                 return@launch
             } catch (ex: SecurityException) {
-                intent.data?.let { MediaUtils.openMediaNoUi(it) }
+                intent.data?.let { MediaUtils.openMediaNoUi(this@StartActivity, it) }
             }
             intent.data?.authority == getString(R.string.tv_provider_authority) -> MediaUtils.openMediaNoUiFromTvContent(this@StartActivity, intent.data)
             intent.data?.authority == "skip_to" -> PlaybackService.instance?.playIndex(intent.getIntExtra("index", 0))
-            else -> withContext(Dispatchers.IO) { FileUtils.getUri(intent.data)}?.let { MediaUtils.openMediaNoUi(it) }
+            else -> withContext(Dispatchers.IO) { FileUtils.getUri(intent.data)}?.let {
+                // Some media might not be properly labeled
+                // As the last option, it is safer to reset the player before playing any media
+                if (PlaybackService.instance?.isPlaying == true)
+                    PlaybackService.instance?.playlistManager?.player?.stop()
+                MediaUtils.openMediaNoUi(this@StartActivity, it)
+            }
         }
         finish()
     }

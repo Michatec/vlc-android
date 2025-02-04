@@ -131,7 +131,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         }
     private var nextIndex = -1
     private var prevIndex = -1
-    var startupIndex = -1    
     private var previous = Stack<Int>()
     var stopAfter = -1
     var shuffling = false
@@ -249,12 +248,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             Log.w(TAG, "Warning: empty media list, nothing to play !")
             return
         }
-        if (isValidPosition(position)) {
-            currentIndex = position
-        } else {
-            currentIndex = 0
-            startupIndex = if(position >= 0) position else 0
-        }
+        currentIndex = if (isValidPosition(position)) position else 0
 
         // Add handler after loading the list
         mediaList.addEventListener(this@PlaylistManager)
@@ -361,23 +355,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         val size = mediaList.size()
         if (force || repeating.value != PlaybackStateCompat.REPEAT_MODE_ONE) {
             previous.push(currentIndex)
-            //startup index given?
-            if (startupIndex != -1) {
-                currentIndex = startupIndex
-                startupIndex = -1
-            } else {
-                //no startup index given, use next
-                currentIndex = nextIndex
-            }
+            currentIndex = nextIndex
             if (size == 0 || currentIndex < 0 || currentIndex >= size) {
                 Log.w(TAG, "Warning: invalid next index, aborted !")
                 stop()
                 return
             }
             videoBackground = videoBackground || (!player.isVideoPlaying() && player.canSwitchToVideo())
-            if (repeating.value == PlaybackStateCompat.REPEAT_MODE_ONE) {
-                setRepeatType(PlaybackStateCompat.REPEAT_MODE_NONE)
-            }
         }
         launch { playIndex(currentIndex) }
     }
@@ -494,7 +478,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         }
 
         val mw = mediaList.getMedia(index) ?: return
-        if (mw.type == MediaWrapper.TYPE_VIDEO && !isAppStarted()) videoBackground = true
+        val isInCustomPiP: Boolean = service.isInPiPMode.value ?: false
+        if (mw.type == MediaWrapper.TYPE_VIDEO && !isAppStarted() && !isInCustomPiP) videoBackground = true
         val isVideoPlaying = mw.type == MediaWrapper.TYPE_VIDEO && player.isVideoPlaying()
         setRepeatTypeFromSettings()
         if (!videoBackground && isVideoPlaying) mw.addFlags(MediaWrapper.MEDIA_VIDEO)
@@ -553,6 +538,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             //todo in VLC 4.0, this should be done by using libvlc_media_player_set_time instead of start-time
             media.addOption(":start-time=${start/1000L}")
+            media.addOption(":no-sout-chromecast-video")
             VLCOptions.setMediaOptions(media, ctx, flags or mw.flags, PlaybackService.hasRenderer())
             /* keeping only video during benchmark */
             if (isBenchmark) {
@@ -736,10 +722,16 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             player.setSpuTrack(media.getMetaLong(MediaWrapper.META_SUBTITLE_TRACK).toString())
             player.setSpuDelay(media.getMetaLong(MediaWrapper.META_SUBTITLE_DELAY))
-            val rateString = if (settings.getBoolean(PLAYBACK_HISTORY, true)) media.getMetaString(MediaWrapper.META_SPEED) else null
-            if (!rateString.isNullOrEmpty()) {
-                player.setRate(rateString.toFloat(), false)
-            }
+            restoreSpeed(media)
+        } else if (media.isPodcast) {
+            restoreSpeed(media)
+        }
+    }
+
+    private fun restoreSpeed(media: MediaWrapper) {
+        val rateString = if (settings.getBoolean(PLAYBACK_HISTORY, true)) media.getMetaString(MediaWrapper.META_SPEED) else null
+        if (!rateString.isNullOrEmpty()) {
+            player.setRate(rateString.toFloat(), false)
         }
     }
 
@@ -760,7 +752,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         if (!isAudio && saveVideoPlayQueue) {
             settings.putSingle(KEY_CURRENT_MEDIA_RESUME, media.location)
             settings.putSingle(KEY_CURRENT_AUDIO_RESUME_TITLE, media.title ?: "")
-            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artist ?: "")
+            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artistName ?: "")
             settings.putSingle(KEY_CURRENT_AUDIO_RESUME_THUMB, media.artworkURL ?: "")
             settings.putSingle(KEY_CURRENT_MEDIA, media.location)
         }
@@ -768,7 +760,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             settings.putSingle(KEY_CURRENT_MEDIA_RESUME, media.location)
             settings.putSingle(KEY_CURRENT_AUDIO, media.location)
             settings.putSingle(KEY_CURRENT_AUDIO_RESUME_TITLE, media.title ?: "")
-            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artist ?: "")
+            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artistName ?: "")
             settings.putSingle(KEY_CURRENT_AUDIO_RESUME_THUMB, media.artworkURL ?: "")
         }
     }
@@ -1151,7 +1143,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                         newMedia = false
                         if (player.hasRenderer || !player.isVideoPlaying()) showAudioPlayer.value = true
                         savePlaycount(mw)
-                        if (mw.title == mw.fileName || (mw.type == MediaWrapper.TYPE_STREAM && (mw.title != player.mediaplayer.media?.getMeta(IMedia.Meta.Title, true) || mw.artist != player.mediaplayer.media?.getMeta(IMedia.Meta.Artist, true)))) {
+                        if (mw.title == mw.fileName || (mw.type == MediaWrapper.TYPE_STREAM && (mw.title != player.mediaplayer.media?.getMeta(IMedia.Meta.Title, true) || mw.artistName != player.mediaplayer.media?.getMeta(IMedia.Meta.Artist, true)))) {
                             // used for initial metadata update. We avoid the metadata load when the initial MediaPlayer.Event.ESSelected is sent to avoid race conditions
                             refreshTrackMeta(mw)
                         }
@@ -1196,8 +1188,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 }
                 MediaPlayer.Event.TimeChanged -> {
                     abRepeat.value?.let {
+                        val fastSeek = settings.getBoolean("always_fast_seek", false)
                         if (it.stop != -1L && player.getCurrentTime() > it.stop) service.setTime(it.start, false)
-                        if (player.getCurrentTime() < it.start) service.setTime(it.start, false)
+                        if ((fastSeek && player.getCurrentTime() < it.start - 30000L)
+                            || (!fastSeek && player.getCurrentTime() < it.start))
+                            service.setTime(it.start, false)
                     }
                     if (player.getCurrentTime() % 10 == 0L) savePosition()
                     val now = System.currentTimeMillis()
@@ -1215,7 +1210,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 MediaPlayer.Event.ESSelected -> {
                     getCurrentMedia()?.let { media ->
                         if (player.isPlaying()) {
-                            if (media.type == MediaWrapper.TYPE_STREAM && (media.title != player.mediaplayer.media?.getMeta(IMedia.Meta.Title, true) || media.artist != player.mediaplayer.media?.getMeta(IMedia.Meta.Artist, true))) {
+                            if (media.type == MediaWrapper.TYPE_STREAM && (media.title != player.mediaplayer.media?.getMeta(IMedia.Meta.Title, true) || media.artistName != player.mediaplayer.media?.getMeta(IMedia.Meta.Artist, true))) {
                                 refreshTrackMeta(media)
                             }
                         }

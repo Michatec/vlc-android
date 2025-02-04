@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.collection.SimpleArrayMap
@@ -52,20 +53,18 @@ private const val TAG = "VLC/MediaUtils"
 private typealias MediaContentResolver = SimpleArrayMap<String, IMediaContentResolver>
 
 object MediaUtils {
-    fun getSubs(activity: FragmentActivity, mediaList: List<MediaWrapper>) {
-        if (activity is AppCompatActivity) showSubtitleDownloaderDialogFragment(activity, mediaList.map { it.uri }, mediaList.map { it.title })
+    fun getSubs(activity: FragmentActivity, media: MediaWrapper) {
+        if (activity is AppCompatActivity) showSubtitleDownloaderDialogFragment(activity, media.uri, media.title)
         else {
             val intent = Intent(activity, DialogActivity::class.java).setAction(DialogActivity.KEY_SUBS_DL)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.putParcelableArrayListExtra(DialogActivity.EXTRA_MEDIALIST, mediaList as? ArrayList
-                    ?: ArrayList(mediaList))
+            intent.putExtra(DialogActivity.EXTRA_MEDIA, media)
             ContextCompat.startActivity(activity, intent, null)
         }
     }
 
-    fun getSubs(activity: FragmentActivity, media: MediaWrapper) = getSubs(activity, listOf(media))
 
-    fun showSubtitleDownloaderDialogFragment(activity: FragmentActivity, mediaUris: List<Uri>, mediaTitles:List<String>) {
+    fun showSubtitleDownloaderDialogFragment(activity: FragmentActivity, mediaUris: Uri, mediaTitles:String) {
         SubtitleDownloaderDialogFragment.newInstance(mediaUris, mediaTitles).show(activity.supportFragmentManager, "Subtitle_downloader")
     }
 
@@ -171,8 +170,12 @@ object MediaUtils {
         openMediaNoUi(ctx, media)
     }
 
-    fun openMediaNoUi(uri: Uri) = openMediaNoUi(AppContextProvider.appContext, MLServiceLocator.getAbstractMediaWrapper(uri))
-
+    fun openMediaNoUi(ctx: Context, uri: Uri) = AppScope.launch {
+        var media = ctx.getFromMl { getMedia(uri) }
+        if (media == null)
+            media = MLServiceLocator.getAbstractMediaWrapper(uri)
+        openMediaNoUi(ctx, media)
+    }
     fun openMediaNoUi(context: Context?, media: MediaWrapper?) {
         if (media == null || context == null) return
         object : BaseCallBack(context) {
@@ -299,7 +302,7 @@ object MediaUtils {
     fun getMediaArtist(ctx: Context, media: MediaWrapper?): String = when {
         media == null -> getMediaString(ctx, R.string.unknown_artist)
         media.type == MediaWrapper.TYPE_VIDEO -> ""
-        media.artist != null -> media.artist
+        media.artistName != null -> media.artistName
         media.nowPlaying != null -> media.title
         isSchemeStreaming(media.uri.scheme) -> ""
         else -> getMediaString(ctx, R.string.unknown_artist)
@@ -307,12 +310,12 @@ object MediaUtils {
 
     fun getMediaReferenceArtist(ctx: Context, media: MediaWrapper?) = getMediaArtist(ctx, media)
 
-    fun getMediaAlbumArtist(ctx: Context, media: MediaWrapper?) = media?.albumArtist
+    fun getMediaAlbumArtist(ctx: Context, media: MediaWrapper?) = media?.albumArtistName
             ?: getMediaString(ctx, R.string.unknown_artist)
 
     fun getMediaAlbum(ctx: Context, media: MediaWrapper?): String = when {
         media == null -> getMediaString(ctx, R.string.unknown_album)
-        media.album != null -> media.album
+        media.albumName != null -> media.albumName
         media.nowPlaying != null -> ""
         isSchemeStreaming(media.uri.scheme) -> ""
         else -> getMediaString(ctx, R.string.unknown_album)
@@ -329,21 +332,27 @@ object MediaUtils {
         }
         val suffix = when {
             media.type == MediaWrapper.TYPE_VIDEO -> generateResolutionClass(media.width, media.height)
-            media.length > 0L -> media.artist
+            media.length > 0L -> media.artistName
             isSchemeStreaming(media.uri.scheme) -> media.uri.toString()
-            else -> media.artist
+            else -> media.artistName
         }
         return TextUtils.separatedString(prefix, suffix)
     }
 
-    fun getDisplaySubtitle(ctx: Context, media: MediaWrapper, mediaPosition: Int, mediaSize: Int): String {
+    fun getDisplaySubtitle(ctx: Context, media: MediaWrapper): String? {
         val album = getMediaAlbum(ctx, media)
         val artist = getMediaArtist(ctx, media)
         val isAlbumUnknown = album == getMediaString(ctx, R.string.unknown_album)
         val isArtistUnknown = artist == getMediaString(ctx, R.string.unknown_artist)
-        val prefix = if (mediaSize > 1) "${mediaPosition + 1} / $mediaSize" else null
-        val suffix = if (!isArtistUnknown && !isAlbumUnknown) TextUtils.separatedString('-', artist.markBidi(), album.markBidi()) else null
-        return TextUtils.separatedString(prefix, suffix)
+        return if (!isArtistUnknown && !isAlbumUnknown) TextUtils.separatedString(artist.markBidi(), album.markBidi()) else null
+    }
+
+    fun getQueuePosition(mediaPosition: Int, mediaSize: Int, shortQueue: Boolean = false): String? {
+        return when {
+            shortQueue && mediaSize > 1 -> "${mediaPosition + 1}"
+            mediaSize > 1 -> "${mediaPosition + 1} / $mediaSize"
+            else -> null
+        }
     }
 
     fun getMediaTitle(mediaWrapper: MediaWrapper) = mediaWrapper.title
@@ -466,7 +475,7 @@ object MediaUtils {
                     }
                 } ?: return@launch
                 when (mw) {
-                    is MediaWrapper -> openMediaNoUi(mw.uri)
+                    is MediaWrapper -> openMediaNoUi(context, mw.uri)
                     is Album -> playAlbum(context, mw)
                     is Artist -> playArtist(context, mw)
                 }
@@ -497,6 +506,21 @@ object MediaUtils {
             FileUtils.copyFile(File(uri.path), VLCOptions.getSoundFontFile(context))
         }
     }
+}
+
+fun Folder.isOTG(): Boolean {
+    try {
+        return Uri.parse(mMrl).isOTG()
+    } catch (_: Exception) {
+    }
+    return false
+}
+fun Folder.isSD(): Boolean {
+    try {
+        return Uri.parse(mMrl).isSD()
+    } catch (_: Exception) {
+    }
+    return false
 }
 
 @WorkerThread

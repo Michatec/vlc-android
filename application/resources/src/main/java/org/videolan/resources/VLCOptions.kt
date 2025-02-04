@@ -32,12 +32,12 @@ import androidx.core.content.getSystemService
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.AndroidUtil
-import org.videolan.libvlc.util.HWDecoderUtil
 import org.videolan.libvlc.util.VLCUtil
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.tools.Preferences
 import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
+import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.isVLC4
 import java.io.File
 import java.util.*
@@ -75,6 +75,7 @@ object VLCOptions {
             val subtitlesEncoding = pref.getString("subtitle_text_encoding", "") ?: ""
             val frameSkip = pref.getBoolean("enable_frame_skip", false)
             val verboseMode = pref.getBoolean("enable_verbose_mode", true)
+            val castingAudioOnly = pref.getBoolean("casting_audio_only", false)
 
             var deblocking = -1
             try {
@@ -105,6 +106,7 @@ object VLCOptions {
 
 
             val opengl = Integer.parseInt(pref.getString("opengl", "-1")!!)
+            if (castingAudioOnly) options.add("--no-sout-chromecast-video")
             options.add(if (timeStreching) "--audio-time-stretch" else "--no-audio-time-stretch")
             options.add("--avcodec-skiploopfilter")
             options.add("" + deblocking)
@@ -204,8 +206,8 @@ object VLCOptions {
         } catch (ignored: NumberFormatException) {
         }
 
-        val hwaout = HWDecoderUtil.getAudioOutputFromDevice()
-        if (hwaout == HWDecoderUtil.AudioOutput.OPENSLES)
+        val hwaout = VlcMigrationHelper.getAudioOutputFromDevice()
+        if (hwaout == VlcMigrationHelper.AudioOutput.OPENSLES)
             aout = AOUT_OPENSLES
 
         return if (aout == AOUT_OPENSLES) "opensles" else if (aout == AOUT_AUDIOTRACK) "audiotrack" else null /* aaudio is the default */

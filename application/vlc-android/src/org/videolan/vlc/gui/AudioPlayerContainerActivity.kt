@@ -55,7 +55,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.KEY_CURRENT_AUDIO
 import org.videolan.resources.util.getFromMl
@@ -112,6 +111,8 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
     val playlistTipsDelegate: AudioPlaylistTipsDelegate by lazy(LazyThreadSafetyMode.NONE) { AudioPlaylistTipsDelegate(this) }
     private val playerKeyListenerDelegate: PlayerKeyListenerDelegate by lazy(LazyThreadSafetyMode.NONE) { PlayerKeyListenerDelegate(this@AudioPlayerContainerActivity) }
     val shownTips = ArrayList<Int>()
+    private var currentConfirmationDialog: AlertDialog? = null
+
     protected val currentFragment: Fragment?
         get() = supportFragmentManager.findFragmentById(R.id.fragment_placeholder)
 
@@ -119,7 +120,7 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
         get() = toolbar.menu
 
     private var observer: Observer<in WaitConfirmation?> = Observer {
-        it?.let {
+        if (it != null) {
             // Every AudioPlayerContainerActivity instance will receive this. To avoid having the
             // Dialog pop every time the user goes to previous instances, stop the
             // showConfirmationResumeDialog once it's been shown.
@@ -127,7 +128,8 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
                 it.used = true
                 showConfirmResumeDialog(it)
             }
-        }
+        } else
+            currentConfirmationDialog?.dismiss()
     }
 
     open fun isTransparent(): Boolean = false
@@ -165,7 +167,7 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
            restoreBookmarks =  savedInstanceState.getBoolean(BOOKMARK_VISIBLE, false)
         }
         super.onCreate(savedInstanceState)
-        if (AndroidUtil.isLolliPopOrLater && this is MainActivity) WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (VlcMigrationHelper.isLolliPopOrLater && this is MainActivity) WindowCompat.setDecorFitsSystemWindows(window, false)
 
         volumeControlStream = AudioManager.STREAM_MUSIC
         registerLiveData()
@@ -246,10 +248,27 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
         tabLayout?.viewTreeObserver?.addOnGlobalLayoutListener {
             //add a shadow if there are tabs
             val needToElevate = (tabLayout?.layoutParams?.height != 0) || navigationRail?.visibility ?: View.GONE != View.GONE
-            if (AndroidUtil.isLolliPopOrLater) appBarLayout.elevation = if (needToElevate) 8.dp.toFloat() else 0.dp.toFloat()
+            if (VlcMigrationHelper.isLolliPopOrLater) appBarLayout.elevation = if (needToElevate) 8.dp.toFloat() else 0.dp.toFloat()
         }
         audioPlayerContainer = findViewById(R.id.audio_player_container)
         (audioPlayerContainer.layoutParams as CoordinatorLayout.LayoutParams).bottomMargin = bottomInset
+    }
+
+    private fun updateToolbarScrollability(enabled: Boolean) {
+        if (toolbar.layoutParams is AppBarLayout.LayoutParams) {
+            val params = toolbar.layoutParams as AppBarLayout.LayoutParams
+            val appBarLayoutParams = appBarLayout.layoutParams as CoordinatorLayout.LayoutParams
+
+            if (!enabled) {
+                params.scrollFlags = 0
+                appBarLayoutParams.behavior = null
+                appBarLayout.setLayoutParams(appBarLayoutParams)
+            } else {
+                params.scrollFlags = AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL or AppBarLayout.LayoutParams.SCROLL_FLAG_ENTER_ALWAYS or AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP
+                appBarLayoutParams.behavior = AppBarLayout.Behavior()
+                appBarLayout.setLayoutParams(appBarLayoutParams)
+            }
+        }
     }
 
     fun setTabLayoutVisibility(show: Boolean) {
@@ -259,6 +278,7 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
 
     private fun showConfirmResumeDialog(confirmation: WaitConfirmation) {
         PlaybackService.instance?.pause()
+        PlaybackService.waitConfirmation.postValue(confirmation.title)
         val inflater = this.layoutInflater
         val dialogView = inflater.inflate(R.layout.dialog_video_resume, null)
         val resumeAllCheck = dialogView.findViewById<CheckBox>(R.id.video_resume_checkbox)
@@ -274,6 +294,10 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
                 if (resumeAllCheck.isChecked) PlaybackService.instance?.playlistManager?.audioResumeStatus = ResumeStatus.NEVER
                 lifecycleScope.launch { PlaybackService.instance?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceRestart = true) }
             }
+            .setOnDismissListener {
+                currentConfirmationDialog = null
+                PlaybackService.waitConfirmation.postValue(null)
+            }
             .create().apply {
                 setCancelable(true)
                 setOnCancelListener {
@@ -286,6 +310,7 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
                         true
                     } else false
                 }
+                currentConfirmationDialog = this
                 show()
             }
     }
@@ -338,6 +363,7 @@ open class AudioPlayerContainerActivity : BaseActivity(), KeycodeListener, Sched
                         STATE_HIDDEN -> audioPlayerContainer.announceForAccessibility(getString(R.string.talkback_audio_player_closed))
                     }
                 }
+                updateToolbarScrollability(newState == STATE_COLLAPSED)
             }
         })
         showTipViewIfNeeded(R.id.audio_player_tips, PREF_AUDIOPLAYER_TIPS_SHOWN)

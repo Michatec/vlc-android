@@ -54,6 +54,7 @@ import org.videolan.resources.HEADER_HISTORY
 import org.videolan.resources.HEADER_MISC
 import org.videolan.resources.HEADER_NETWORK
 import org.videolan.resources.HEADER_NOW_PLAYING
+import org.videolan.resources.HEADER_PERMISSION
 import org.videolan.resources.HEADER_PLAYLISTS
 import org.videolan.resources.HEADER_RECENTLY_ADDED
 import org.videolan.resources.HEADER_RECENTLY_PLAYED
@@ -351,7 +352,7 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
         val intent = Intent(requireActivity(), DetailsActivity::class.java)
         // pass the item information
         intent.putExtra(EXTRA_MEDIA, media)
-        intent.putExtra(EXTRA_ITEM, MediaItemDetails(media.title, media.artist, media.album, media.location, media.artworkURL))
+        intent.putExtra(EXTRA_ITEM, MediaItemDetails(media.title, media.artistName, media.albumName, media.location, media.artworkURL))
         startActivity(intent)
         return true
     }
@@ -360,10 +361,14 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
         val activity = requireActivity()
         when (row?.id) {
             HEADER_CATEGORIES -> {
-                val intent = Intent(activity, VerticalGridActivity::class.java)
-                intent.putExtra(MainTvActivity.BROWSER_TYPE, HEADER_CATEGORIES)
-                intent.putExtra(CATEGORY, (item as DummyItem).id)
-                activity.startActivity(intent)
+                if ((item as? DummyItem)?.id == HEADER_PERMISSION)
+                    model.open(activity, item)
+                else {
+                    val intent = Intent(activity, VerticalGridActivity::class.java)
+                    intent.putExtra(MainTvActivity.BROWSER_TYPE, HEADER_CATEGORIES)
+                    intent.putExtra(CATEGORY, (item as DummyItem).id)
+                    activity.startActivity(intent)
+                }
             }
             HEADER_MISC -> {
                 when ((item as GenericCardItem).id) {

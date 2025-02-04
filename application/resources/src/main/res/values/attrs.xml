@@ -64,6 +64,7 @@
     <attr name="audio_chip_text_color" format="color" />
     <attr name="audio_seek_bar" format="reference" />
     <attr name="mini_visualizer_color" format="color" />
+    <attr name="round_background" format="reference" />
     <attr name="audio_chips_color" format="color" />
     <attr name="audio_chips_text_color" format="color" />
     <attr name="bookmark_background" format="color" />
@@ -81,6 +82,7 @@
     <attr name="widget_preview_rounded_bg" format="reference" />
     <attr name="swipe_refresh_background" format="reference|color" />
     <attr name="dialogButtonStyle" format="reference" />
+    <attr name="permission_explanation_background" format="color" />
 
     <!--Main Icons-->
     <attr name="gridview_progressbar" format="reference" />

@@ -21,11 +21,14 @@
 package org.videolan.vlc.providers
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.core.net.toUri
 import androidx.lifecycle.Observer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.util.MediaBrowser
+import org.videolan.medialibrary.MLServiceLocator
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.DummyItem
@@ -34,13 +37,16 @@ import org.videolan.tools.NetworkMonitor
 import org.videolan.tools.livedata.LiveDataset
 import org.videolan.vlc.R
 
-class NetworkProvider(context: Context, dataset: LiveDataset<MediaLibraryItem>, url: String? = null): BrowserProvider(context, dataset, url, Medialibrary.SORT_FILENAME, false), Observer<List<MediaWrapper>> {
+class NetworkProvider(context: Context, dataset: LiveDataset<MediaLibraryItem>, url: String? = null, val mocked: ArrayList<MediaLibraryItem>? = null): BrowserProvider(context, dataset, url, Medialibrary.SORT_FILENAME, false), Observer<List<MediaWrapper>> {
 
 
     override suspend fun browseRootImpl() {
         dataset.clear()
         dataset.value = mutableListOf()
-        if (NetworkMonitor.getInstance(context).lanAllowed) browse()
+        if (mocked!= null)
+            dataset.value = mocked.toMutableList()
+        else
+            if (NetworkMonitor.getInstance(context).lanAllowed) browse()
     }
 
     override fun fetch() {}

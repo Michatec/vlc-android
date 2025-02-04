@@ -28,6 +28,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.*
 import androidx.appcompat.view.ActionMode
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
@@ -37,12 +38,15 @@ import kotlinx.coroutines.withContext
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.medialibrary.media.MediaWrapperImpl
+import org.videolan.resources.EXTRA_FOR_ESPRESSO
+import org.videolan.resources.util.parcelableList
 import org.videolan.tools.*
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.BaseFragment
 import org.videolan.vlc.gui.SecondaryActivity
 import org.videolan.vlc.gui.dialogs.CtxActionReceiver
 import org.videolan.vlc.gui.dialogs.NetworkServerDialog
+import org.videolan.vlc.gui.dialogs.PermissionListDialog
 import org.videolan.vlc.gui.dialogs.showContext
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylistAsync
@@ -157,12 +161,22 @@ class MainBrowserFragment : BaseFragment(), View.OnClickListener, CtxActionRecei
     override fun getTitle() = getString(R.string.browse)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Settings.getInstance(requireActivity()).edit {
+            putBoolean("navigator_screen_unstable", true)
+        }
         browserFavRepository = BrowserFavRepository.getInstance(requireContext())
         networkMonitor = NetworkMonitor.getInstance(requireContext())
         super.onCreate(savedInstanceState)
         localViewModel = getBrowserModel(category = TYPE_FILE, url = null)
         favoritesViewModel = BrowserFavoritesModel(requireContext())
-        networkViewModel = getBrowserModel(category = TYPE_NETWORK, url = null)
+        networkViewModel = getBrowserModel(category = TYPE_NETWORK, url = null, mocked = arguments?.parcelableList(EXTRA_FOR_ESPRESSO))
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Settings.getInstance(requireActivity()).edit {
+            putBoolean("navigator_screen_unstable", false)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -176,6 +190,12 @@ class MainBrowserFragment : BaseFragment(), View.OnClickListener, CtxActionRecei
         val storageBrowserAdapter = BaseBrowserAdapter(storageBrowserContainer)
         localEntry.list.adapter = storageBrowserAdapter
         containerAdapterAssociation[storageBrowserContainer] = Pair(storageBrowserAdapter, localViewModel)
+        PermissionListDialog.hasAnyPermission.observe(viewLifecycleOwner) {
+            if (it) {
+                localViewModel.provider.refresh()
+                favoritesViewModel.provider.refresh()
+            }
+        }
         localViewModel.dataset.observe(viewLifecycleOwner) { list ->
             list?.let {
                 if (Permissions.canReadStorage(requireActivity())) storageBrowserAdapter.update(it)

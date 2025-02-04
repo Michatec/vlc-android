@@ -46,7 +46,7 @@ import org.videolan.television.ui.audioplayer.AudioPlayerActivity
 import org.videolan.television.ui.browser.TVActivity
 import org.videolan.television.ui.browser.VerticalGridActivity
 import org.videolan.television.ui.details.MediaListActivity
-import org.videolan.tools.FORCE_PLAY_ALL_VIDEO
+import org.videolan.tools.PLAYLIST_MODE_VIDEO
 import org.videolan.tools.HttpImageLoader
 import org.videolan.tools.Settings
 import org.videolan.tools.getposition
@@ -179,7 +179,7 @@ object TvUtil {
                 }
                 else -> {
                     model.run {
-                        if (!Settings.getInstance(activity).getBoolean(FORCE_PLAY_ALL_VIDEO, Settings.tvUI)) {
+                        if (!Settings.getInstance(activity).getBoolean(PLAYLIST_MODE_VIDEO, Settings.tvUI)) {
                             MediaUtils.openMedia(activity, item)
                         } else {
                             val list = (dataset.getList().filterIsInstance<MediaWrapper>()).filter { it.type != MediaWrapper.TYPE_DIR }
@@ -253,7 +253,7 @@ object TvUtil {
     fun showMediaDetail(activity: Context, mediaWrapper: MediaWrapper, fromHistory:Boolean = false) {
         val intent = Intent(activity, DetailsActivity::class.java)
         intent.putExtra("media", mediaWrapper)
-        intent.putExtra("item", MediaItemDetails(mediaWrapper.title, mediaWrapper.artist, mediaWrapper.album, mediaWrapper.location, mediaWrapper.artworkURL))
+        intent.putExtra("item", MediaItemDetails(mediaWrapper.title, mediaWrapper.artistName, mediaWrapper.albumName, mediaWrapper.location, mediaWrapper.artworkURL))
         if (fromHistory) intent.putExtra(EXTRA_FROM_HISTORY, fromHistory)
         activity.startActivity(intent)
     }
@@ -305,6 +305,15 @@ fun CoroutineScope.updateBackground(activity: Activity, bm: BackgroundManager?, 
         } else if (item.itemType == MediaLibraryItem.TYPE_PLAYLIST) {
             val blurred = withContext(Dispatchers.IO) {
                 var cover: Bitmap? = ThumbnailsProvider.getPlaylistOrGenreImage("playlist:${item.id}_512", item.tracks.toList(), 512)
+                        ?: return@withContext null
+                cover = cover?.let { BitmapUtil.centerCrop(it, it.width, (it.width / screenRatio).toInt()) }
+                UiTools.blurBitmap(cover, 10f)
+            }
+            if (!isActive) return@launch
+            blurred?.let { bm.drawable = BitmapDrawable(activity.resources, it) }
+        } else if (item is MediaWrapper && item.type == MediaWrapper.TYPE_ALL) {
+           val blurred = withContext(Dispatchers.IO) {
+                var cover: Bitmap? = AudioUtil.fetchCoverBitmap(item.uri.toString(), 512)
                         ?: return@withContext null
                 cover = cover?.let { BitmapUtil.centerCrop(it, it.width, (it.width / screenRatio).toInt()) }
                 UiTools.blurBitmap(cover, 10f)

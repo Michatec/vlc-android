@@ -23,6 +23,7 @@ package org.videolan.television.ui
 import android.annotation.TargetApi
 import android.app.Application
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
@@ -40,6 +41,7 @@ import kotlinx.coroutines.channels.actor
 import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.medialibrary.MLServiceLocator
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
+import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.moviepedia.database.models.MediaImage
 import org.videolan.moviepedia.database.models.MediaImageType
 import org.videolan.moviepedia.database.models.MediaMetadata
@@ -60,6 +62,7 @@ import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.DialogActivity
 import org.videolan.vlc.gui.DialogActivity.Companion.EXTRA_MEDIA
+import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
 import org.videolan.vlc.gui.helpers.AudioUtil
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
@@ -67,8 +70,10 @@ import org.videolan.vlc.gui.video.VideoPlayerActivity
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.repository.BrowserFavRepository
 import org.videolan.vlc.util.FileUtils
+import org.videolan.vlc.util.Permissions
 import org.videolan.vlc.util.convertFavorites
 import org.videolan.vlc.util.getScreenWidth
+import org.videolan.vlc.util.isSchemeFile
 import org.videolan.vlc.util.isSchemeNetwork
 
 private const val TAG = "MediaItemDetailsFragment"
@@ -86,6 +91,7 @@ private const val ID_FAVORITE = 11
 private const val ID_REMOVE_FROM_HISTORY = 12
 private const val ID_NAVIGATE_PARENT = 13
 private const val ID_FAVORITE_EDIT = 14
+private const val ID_DELETE = 15
 const val EXTRA_FROM_HISTORY = "from_history"
 const val EXTRA_ITEM = "item"
 const val EXTRA_MEDIA = "media"
@@ -152,7 +158,7 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
         viewModel.browserFavUpdated.observe(this, Observer { newMedia ->
             val intent = Intent(requireActivity(), DetailsActivity::class.java)
             intent.putExtra(org.videolan.television.ui.EXTRA_MEDIA, newMedia)
-            intent.putExtra(EXTRA_ITEM, MediaItemDetails(newMedia.title, newMedia.artist, newMedia.album, newMedia.location, newMedia.artworkURL))
+            intent.putExtra(EXTRA_ITEM, MediaItemDetails(newMedia.title, newMedia.artistName, newMedia.albumName, newMedia.location, newMedia.artworkURL))
             startActivity(intent)
             requireActivity().finish()
         })
@@ -180,6 +186,10 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
         }
     }
 
+    private fun onDeleteFailed(item: MediaLibraryItem) {
+        Toast.makeText(requireActivity(), getString(R.string.msg_delete_failed, item.title), Toast.LENGTH_LONG).show()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putParcelable(EXTRA_ITEM, viewModel.mediaItemDetails)
         outState.putParcelable(org.videolan.television.ui.EXTRA_MEDIA, viewModel.media)
@@ -194,9 +204,10 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
         }
     }
 
-    private fun loadBackdrop(url: String? = null) {
+    private fun loadBackdrop(url: String? = null, bitmap: Bitmap? = null) {
         lifecycleScope.launchWhenStarted {
             when {
+                bitmap != null -> UiTools.blurBitmap(bitmap)
                 !url.isNullOrEmpty() -> HttpImageLoader.downloadBitmap(url)
                 viewModel.media.type == MediaWrapper.TYPE_AUDIO || viewModel.media.type == MediaWrapper.TYPE_VIDEO -> {
                     withContext(Dispatchers.IO) {
@@ -340,6 +351,15 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
                         activity.startActivity(intent)
                     }
                 }
+                ID_DELETE -> {
+                    if (!Permissions.canWriteStorage(requireActivity())) {
+                        Permissions.askWriteStoragePermission(requireActivity(), false) {
+                            delete()
+                        }
+                        return@OnActionClickedListener
+                    }
+                    delete()
+                }
                 ID_PLAYLIST -> requireActivity().addToPlaylist(arrayListOf(viewModel.media))
                 ID_FAVORITE_ADD -> {
                     val uri = viewModel.mediaItemDetails.location!!.toUri()
@@ -390,7 +410,9 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
         lifecycleScope.launchWhenStarted {
             val cover = if (viewModel.media.type == MediaWrapper.TYPE_AUDIO || viewModel.media.type == MediaWrapper.TYPE_VIDEO)
                 withContext(Dispatchers.IO) { AudioUtil.readCoverBitmap(viewModel.mediaItemDetails.artworkUrl, 512) }
-            else null
+            else if (viewModel.media.type == MediaWrapper.TYPE_ALL) {
+              withContext(Dispatchers.IO) { AudioUtil.fetchCoverBitmap(viewModel.media.uri.toString(), 512) }
+            } else null
             val browserFavExists = browserFavRepository.browserFavExists(viewModel.mediaItemDetails.location!!.toUri())
             val isDir = viewModel.media.type == MediaWrapper.TYPE_DIR
             val canSave = isDir && withContext(Dispatchers.IO) { FileUtils.canSave(viewModel.media) }
@@ -420,6 +442,7 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
                 actionsAdapter.set(ID_PLAY, Action(ID_PLAY.toLong(), res.getString(R.string.play)))
                 actionsAdapter.set(ID_LISTEN, Action(ID_LISTEN.toLong(), res.getString(R.string.listen)))
                 actionsAdapter.set(ID_PLAYLIST, Action(ID_PLAYLIST.toLong(), res.getString(R.string.add_to_playlist)))
+                if (viewModel.media.uri.scheme.isSchemeFile()) actionsAdapter.set(ID_DELETE, Action(ID_DELETE.toLong(), res.getString(R.string.delete)))
             } else if (viewModel.media.type == MediaWrapper.TYPE_VIDEO) {
                 // Add images and action buttons to the details view
                 if (cover == null) {
@@ -438,10 +461,33 @@ class MediaItemDetailsFragment : DetailsSupportFragment(), CoroutineScope by Mai
                 actionsAdapter.set(ID_PLAYLIST, Action(ID_PLAYLIST.toLong(), res.getString(R.string.add_to_playlist)))
                 //todo reenable entry point when ready
                 if (BuildConfig.DEBUG) actionsAdapter.set(ID_GET_INFO, Action(ID_GET_INFO.toLong(), res.getString(R.string.find_metadata)))
+                if (viewModel.media.uri.scheme.isSchemeFile()) actionsAdapter.set(ID_DELETE, Action(ID_DELETE.toLong(), res.getString(R.string.delete)))
+            } else if (viewModel.media.type == MediaWrapper.TYPE_ALL) {
+                if (cover == null) {
+                    detailsOverview.imageDrawable = ContextCompat.getDrawable(activity, R.drawable.ic_default_cone)
+                } else {
+                    detailsOverview.setImageBitmap(context, cover)
+                    loadBackdrop(null, cover)
+                }
+                if (viewModel.media.uri.retrieveParent() != null) actionsAdapter.set(ID_NAVIGATE_PARENT, Action(ID_NAVIGATE_PARENT.toLong(), res.getString(R.string.go_to_folder)))
             }
             adapter = rowsAdapter
             detailsOverview.actionsAdapter = actionsAdapter
             //    updateMetadata(mediaMetadataModel.updateLiveData.value)
+        }
+    }
+
+    private fun delete() {
+        val dialog = ConfirmDeleteDialog.newInstance(arrayListOf(viewModel.media))
+        dialog.show(requireActivity().supportFragmentManager, ConfirmDeleteDialog::class.simpleName)
+        dialog.setListener {
+            dialog.dismiss()
+            var preventFinish = false
+            MediaUtils.deleteItem(requireActivity(), viewModel.media) {
+                onDeleteFailed(it)
+                preventFinish = true
+            }
+            if (!preventFinish) requireActivity().finish()
         }
     }
 }

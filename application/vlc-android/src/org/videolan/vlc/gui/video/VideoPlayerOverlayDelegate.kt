@@ -25,6 +25,9 @@
 package org.videolan.vlc.gui.video
 
 import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.content.Intent
@@ -36,6 +39,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
+import android.view.animation.Animation.AnimationListener
+import android.view.animation.AnimationSet
 import android.view.animation.AnimationUtils
 import android.widget.Button
 import android.widget.FrameLayout
@@ -83,6 +91,7 @@ import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.viewmodels.PlaylistModel
 import java.text.DateFormat
 import java.util.*
+
 
 class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
 
@@ -381,7 +390,7 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
         if (dim || player.isLocked) {
             player.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             navbar = navbar or (View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LOW_PROFILE or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-            if (AndroidUtil.isKitKatOrLater) visibility = visibility or View.SYSTEM_UI_FLAG_IMMERSIVE
+            if (VlcMigrationHelper.isKitKatOrLater) visibility = visibility or View.SYSTEM_UI_FLAG_IMMERSIVE
             visibility = visibility or View.SYSTEM_UI_FLAG_FULLSCREEN
         } else {
             player.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -539,6 +548,11 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
                 hudBinding.progress = service.playlistManager.player.progress
                 abRepeatAddMarker = hudBinding.abRepeatContainer.findViewById(R.id.ab_repeat_add_marker)
                 service.playlistManager.abRepeat.observe(player) { abvalues ->
+                    if (abvalues.start != -1L && abvalues.stop != -1L && player.settings.getBoolean("always_fast_seek", false)) {
+                        hudBinding.fastSeekWarning.setVisible()
+                    } else {
+                        hudBinding.fastSeekWarning.setGone()
+                    }
                     hudBinding.abRepeatA = if (abvalues.start == -1L) -1F else abvalues.start / service.playlistManager.player.getLength().toFloat()
                     hudBinding.abRepeatB = if (abvalues.stop == -1L) -1F else abvalues.stop / service.playlistManager.player.getLength().toFloat()
                     hudBinding.abRepeatMarkerA.visibility = if (abvalues.start == -1L) View.GONE else View.VISIBLE
@@ -623,6 +637,9 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
             hudBinding.playerOverlaySeekbar.setOnSeekBarChangeListener(if (enabled) player.seekListener else null)
             hudBinding.abRepeatReset.setOnClickListener(player)
             hudBinding.abRepeatStop.setOnClickListener(player)
+            hudBinding.fastSeekWarning.setOnClickListener {
+               UiTools.snacker(player, R.string.ab_repeat_fastseek_warning, false)
+            }
             abRepeatAddMarker.setOnClickListener(player)
             hudBinding.orientationToggle.setOnClickListener(if (enabled) player else null)
             hudBinding.orientationToggle.setOnLongClickListener(if (enabled) player else null)
@@ -705,6 +722,36 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
             }
             hudBinding.orientationToggle.setImageDrawable(ContextCompat.getDrawable(player, drawable))
         }
+        if (::hudRightBinding.isInitialized) {
+            if (player.orientationMode.locked) {
+                val drawable = if (player.orientationMode.orientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE || player.orientationMode.orientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE || player.orientationMode.orientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+                    R.drawable.ic_player_lock_landscape
+                } else {
+                    R.drawable.ic_player_lock_portrait
+                }
+                hudRightBinding.orientationQuickAction.setVisible()
+                hudRightBinding.orientationQuickAction.chipIcon = ContextCompat.getDrawable(player, drawable)
+            } else hudRightBinding.orientationQuickAction.setGone()
+        }
+    }
+
+    fun nextOrientation() {
+        val orientations = arrayOf(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE)
+        val orientation = when (player.orientationMode.orientation) {
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE -> orientations[0]
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT -> orientations[1]
+            else -> orientations[orientations.indexOf(player.orientationMode.orientation) + 1]
+        }
+        player.setOrientation(orientation)
+        val string = when (orientation) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> player.getString(R.string.screen_orientation_portrait)
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT -> player.getString(R.string.screen_orientation_portrait_reverse)
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> player.getString(R.string.screen_orientation_landscape)
+            else -> player.getString(R.string.screen_orientation_landscape_reverse)
+        }
+        showInfo(string, 1000)
+        updateOrientationIcon()
+        showOverlay()
     }
 
     fun updateRendererVisibility() {

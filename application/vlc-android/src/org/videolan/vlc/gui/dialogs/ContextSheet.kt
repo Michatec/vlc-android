@@ -32,11 +32,13 @@ import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.resources.AndroidDevices
 import org.videolan.tools.isStarted
 import org.videolan.vlc.R
+import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.databinding.ContextItemBinding
 import org.videolan.vlc.databinding.ContextualSheetBinding
 import org.videolan.vlc.util.ContextOption
@@ -110,6 +112,7 @@ class ContextSheet : VLCBottomSheetDialogFragment() {
     }
 
     private fun populateMenuItems(flags: FlagSet<ContextOption>) = mutableListOf<CtxMenuItem>().apply {
+
         if (flags.contains(CTX_PLAY)) add(Simple(CTX_PLAY, getString(R.string.play), R.drawable.ic_play))
         if (flags.contains(CTX_PLAY_SHUFFLE)) add(Simple(CTX_PLAY_SHUFFLE, getString(R.string.shuffle_play), R.drawable.ic_shuffle))
         if (flags.contains(CTX_PLAY_FROM_START)) add(Simple(CTX_PLAY_FROM_START, getString(R.string.play_from_start), R.drawable.ic_play_from_start))
@@ -117,8 +120,11 @@ class ContextSheet : VLCBottomSheetDialogFragment() {
         if (flags.contains(CTX_PLAY_AS_AUDIO)) add(Simple(CTX_PLAY_AS_AUDIO, getString(R.string.play_as_audio), R.drawable.ic_play_as_audio))
         if (flags.contains(CTX_APPEND)) add(Simple(CTX_APPEND, getString(R.string.append), R.drawable.ic_play_append))
         if (flags.contains(CTX_PLAY_NEXT)) add(Simple(CTX_PLAY_NEXT, getString(R.string.insert_next), R.drawable.ic_play_next))
-        if (flags.contains(CTX_DOWNLOAD_SUBTITLES)) add(Simple(CTX_DOWNLOAD_SUBTITLES, getString(R.string.download_subtitles), R.drawable.ic_download_subtitles))
+        if (flags.contains(CTX_DOWNLOAD_SUBTITLES) && VlcMigrationHelper.isLolliPopOrLater) add(Simple(CTX_DOWNLOAD_SUBTITLES, getString(R.string.download_subtitles), R.drawable.ic_download_subtitles))
         if (flags.contains(CTX_INFORMATION)) add(Simple(CTX_INFORMATION, getString(R.string.info), R.drawable.ic_information))
+        if (flags.contains(CTX_GO_TO_ALBUM)) add(Simple(CTX_GO_TO_ALBUM, getString(R.string.go_to_album), R.drawable.ic_album))
+        if (flags.contains(CTX_GO_TO_ARTIST)) add(Simple(CTX_GO_TO_ARTIST, getString(R.string.go_to_artist), R.drawable.ic_no_artist))
+        if (flags.contains(CTX_GO_TO_ALBUM_ARTIST)) add(Simple(CTX_GO_TO_ALBUM_ARTIST, getString(R.string.go_to_album_artist), R.drawable.ic_no_artist))
         if (flags.contains(CTX_ADD_TO_PLAYLIST)) add(Simple(CTX_ADD_TO_PLAYLIST, getString(R.string.add_to_playlist), R.drawable.ic_add_to_playlist))
         if (flags.contains(CTX_SET_RINGTONE) && AndroidDevices.isPhone) add(Simple(CTX_SET_RINGTONE, getString(R.string.set_song), R.drawable.ic_set_ringtone))
         if (flags.contains(CTX_FAV_ADD)) add(Simple(CTX_FAV_ADD, getString(R.string.favorites_add), R.drawable.ic_fav_add))

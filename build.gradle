@@ -1,6 +1,6 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
-    ext.android_plugin_version = '8.4.0'
+    ext.android_plugin_version = '8.5.0'
     ext.kotlin_version = '1.9.22'
     ext.kotlinx_version = '1.7.1'
     repositories {
@@ -39,11 +39,12 @@ allprojects {
 
 ext {
     appId = "org.videolan.vlc"
-    versionCode = 3050730
-    versionName = project.hasProperty('forceVlc4') && project.getProperty('forceVlc4') ? '4.0.0-preview - ' + versionCode : '3.6.0 Beta 3'
+    versionCode = 3060300
+    versionName = project.hasProperty('forceVlc4') && project.getProperty('forceVlc4') ? '4.0.0-preview - ' + versionCode : '3.6.3'
     vlcMajorVersion = project.hasProperty('forceVlc4') && project.getProperty('forceVlc4') ? 4 : 3
-    libvlcVersion = vlcMajorVersion == 3 ? '3.6.0-eap12' :'4.0.0-eap15'
-    medialibraryVersion = vlcMajorVersion == 3 ? '0.13.13-rc12' : '0.13.13-vlc4-rc12'
+    remoteAccessVersion = '0.2.0'
+    libvlcVersion = vlcMajorVersion == 3 ? '3.6.0' :'4.0.0-eap18'
+    medialibraryVersion = vlcMajorVersion == 3 ? '0.13.13-rc15' : '0.13.13-vlc4-rc15'
     minSdkVersion = 17
     targetSdkVersion = 34
     compileSdkVersion = 34
@@ -62,6 +63,7 @@ ext {
     constraintLayoutVersion = '2.1.4'
     windowVersion = '1.1.0'
     mediaVersion = '1.6.0'
+    carVersion = '1.7.0-beta03'
     jdbcVersion =  '3.36.0'
     viewPager2Version = "1.0.0"
     archVersion = '2.2.0'

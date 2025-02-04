@@ -47,10 +47,12 @@ import org.videolan.resources.util.isExternalStorageManager
 import org.videolan.tools.*
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
+import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.media.MediaUtils
 import java.io.*
 import java.lang.Runnable
 import java.util.*
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -194,6 +196,14 @@ object FileUtils {
     }
 
     @WorkerThread
+    fun copyFile(src: String, dst: String): String? {
+        return if (copyFile(File(src), File(dst)))
+            dst
+        else
+            null
+    }
+
+    @WorkerThread
     fun copyFile(src: File, dst: File): Boolean {
         var ret = true
         if (src.isDirectory) {
@@ -216,7 +226,8 @@ object FileUtils {
                     len = inputStream.read(buf)
                 }
                 return true
-            } catch (ignored: IOException) {
+            } catch (exception: IOException) {
+                Log.e(TAG, exception.message, exception)
             } finally {
                 CloseableUtils.close(inputStream)
                 CloseableUtils.close(out)
@@ -228,7 +239,7 @@ object FileUtils {
 
     @WorkerThread
     fun deleteFile(uri: Uri): Boolean {
-        if (isExternalStorageManager() || !AndroidUtil.isLolliPopOrLater || uri.path!!.startsWith(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY)) return deleteFile(uri.path)
+        if (isExternalStorageManager() || !VlcMigrationHelper.isLolliPopOrLater || uri.path!!.startsWith(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY)) return deleteFile(uri.path)
         val docFile = findFile(uri)
         if (docFile != null)
             try {
@@ -452,51 +463,6 @@ object FileUtils {
         return volumeDescription
     }
 
-    suspend fun unpackZip(path: String, unzipDirectory: String): ArrayList<String> = withContext(Dispatchers.IO) {
-        val fis: InputStream
-        val zis: ZipInputStream
-        val unzippedFiles = ArrayList<String>()
-        File(unzipDirectory).mkdirs()
-        try {
-            fis = FileInputStream(path)
-            zis = ZipInputStream(BufferedInputStream(fis))
-            var ze = zis.nextEntry
-
-            while (ze != null) {
-                val baos = ByteArrayOutputStream()
-                val buffer = ByteArray(1024)
-                var count = zis.read(buffer)
-
-                val filename = ze.name.replace('/', ' ')
-                if (filename.endsWith(".nfo")) {
-                    zis.closeEntry()
-                    ze = zis.nextEntry
-                    continue
-                }
-                val fileToUnzip = File(unzipDirectory, filename)
-                val fout = FileOutputStream(fileToUnzip)
-
-                // reading and writing
-                while (count != -1) {
-                    baos.write(buffer, 0, count)
-                    val bytes = baos.toByteArray()
-                    fout.write(bytes)
-                    baos.reset()
-                    count = zis.read(buffer)
-                }
-
-                unzippedFiles.add(fileToUnzip.absolutePath)
-                fout.close()
-                zis.closeEntry()
-                ze = zis.nextEntry
-            }
-            zis.close()
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
-        unzippedFiles
-    }
-
     const val BUFFER = 2048
     fun zip(files: Array<String>, zipFileName: String):Boolean {
         return try {
@@ -524,15 +490,22 @@ object FileUtils {
         }
     }
 
-    fun zipWithName(files: Array<Pair<String, String>>, zipFileName: String): Boolean {
+    fun zipWithName(files: Array<Pair<String, String>>, zipFileName: String, storeOnly: Boolean = false): Boolean {
         return try {
             File(zipFileName).parentFile?.mkdirs()
             ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFileName))).use { out ->
                 val data = ByteArray(BUFFER)
                 for (i in files.indices) {
+                    val entry = ZipEntry(files[i].second).apply {
+                        if (storeOnly) {
+                            method = ZipEntry.STORED
+                            size = File(files[i].first).length()
+                            compressedSize = size
+                            crc = computeZipChecksum(files[i].first)
+                        }
+                    }
                     val fi = FileInputStream(files[i].first)
                     BufferedInputStream(fi, BUFFER).use { origin ->
-                        val entry = ZipEntry(files[i].second)
                         out.putNextEntry(entry)
                         var count = origin.read(data, 0, BUFFER)
 
@@ -548,6 +521,21 @@ object FileUtils {
             Log.e(TAG, e.message, e)
             false
         }
+    }
+
+    private fun computeZipChecksum(inputFile: String): Long {
+        val crc32 = CRC32()
+        val data = ByteArray(BUFFER)
+        val fi = FileInputStream(inputFile)
+        BufferedInputStream(fi, BUFFER).use { origin ->
+            var count = origin.read(data, 0, BUFFER)
+
+            while (count != -1) {
+                crc32.update(data, 0, count)
+                count = origin.read(data, 0, BUFFER)
+            }
+        }
+        return crc32.value
     }
 
     @Throws(Exception::class)

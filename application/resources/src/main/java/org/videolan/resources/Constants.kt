@@ -27,6 +27,7 @@ const val EXTRA_FIRST_RUN = "extra_first_run"
 const val EXTRA_UPGRADE = "extra_upgrade"
 const val EXTRA_PARSE = "extra_parse"
 const val EXTRA_TARGET = "extra_parse"
+const val EXTRA_FOR_ESPRESSO = "extra_for_espresso"
 const val EXTRA_REMOVE_DEVICE = "extra_remove_device"
 
 //UI Navigation
@@ -123,6 +124,7 @@ const val KEY_MRL = "mrl"
 
 // AUDIO category
 const val KEY_AUDIO_CURRENT_TAB = "key_audio_current_tab"
+const val KEY_AUDIO_ALBUM_SONG_CURRENT_TAB = "key_audio_album_song_current_tab"
 
 // Playback settings category
 const val KEY_AUDIO_LAST_PLAYLIST = "audio_list"
@@ -241,8 +243,8 @@ const val MOVIEPEDIA_ACTIVITY = "org.videolan.moviepedia.ui.MoviepediaActivity"
 const val TV_AUDIOPLAYER_ACTIVITY = "org.videolan.television.ui.audioplayer.AudioPlayerActivity"
 const val MEDIAPARSING_SERVICE = "org.videolan.vlc.MediaParsingService"
 const val TV_ONBOARDING_ACTIVITY = "org.videolan.television.ui.OnboardingActivity"
-const val REMOTE_ACCESS_SERVICE = "org.videolan.vlc.webserver.RemoteAccessService"
-const val REMOTE_ACCESS_ONBOARDING = "org.videolan.vlc.webserver.gui.remoteaccess.onboarding.RemoteAccessOnboardingActivity"
+const val REMOTE_ACCESS_SERVICE = "org.videolan.vlc.remoteaccessserver.RemoteAccessService"
+const val REMOTE_ACCESS_ONBOARDING = "org.videolan.vlc.remoteaccessserver.gui.remoteaccess.onboarding.RemoteAccessOnboardingActivity"
 
 const val ROOM_DATABASE = "/vlc_database.zip"
 const val EXPORT_SETTINGS_FILE = "/vlc_exported_settings.json"

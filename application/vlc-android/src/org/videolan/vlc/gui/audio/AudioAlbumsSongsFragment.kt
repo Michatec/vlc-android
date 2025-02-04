@@ -41,6 +41,8 @@ import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.medialibrary.interfaces.media.Album
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
+import org.videolan.resources.KEY_AUDIO_ALBUM_SONG_CURRENT_TAB
+import org.videolan.resources.KEY_AUDIO_CURRENT_TAB
 import org.videolan.resources.util.parcelable
 import org.videolan.tools.*
 import org.videolan.vlc.R
@@ -170,6 +172,8 @@ class AudioAlbumsSongsFragment : BaseAudioBrowser<AlbumSongsViewModel>(), SwipeR
         viewModel.tracksProvider.liveHeaders.observe(viewLifecycleOwner) {
             lists[1].invalidateItemDecorations()
         }
+
+        currentTab = Settings.getInstance(requireActivity()).getInt(KEY_AUDIO_ALBUM_SONG_CURRENT_TAB, 0)
     }
 
     override fun sortBy(sort: Int) {
@@ -286,7 +290,7 @@ class AudioAlbumsSongsFragment : BaseAudioBrowser<AlbumSongsViewModel>(), SwipeR
             startActivity(i)
         } else {
             if (inSearchMode()) UiTools.setKeyboardVisibility(v, false)
-            if (Settings.getInstance(requireContext()).getBoolean(FORCE_PLAY_ALL_AUDIO, false))
+            if (Settings.getInstance(requireContext()).getBoolean(PLAYLIST_MODE_AUDIO, false))
                 MediaUtils.playAll(activity, viewModel.tracksProvider, position, false)
             else
                 MediaUtils.openMedia(v.context, item as MediaWrapper)
@@ -310,6 +314,7 @@ class AudioAlbumsSongsFragment : BaseAudioBrowser<AlbumSongsViewModel>(), SwipeR
 
     override fun onTabSelected(tab: TabLayout.Tab) {
         super.onTabSelected(tab)
+        Settings.getInstance(requireActivity()).putSingle(KEY_AUDIO_ALBUM_SONG_CURRENT_TAB, tab.position)
         fastScroller.setRecyclerView(lists[tab.position], viewModel.providers[tab.position])
         activity?.invalidateOptionsMenu()
     }

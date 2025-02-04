@@ -157,6 +157,7 @@ fun FragmentActivity.share(medias: List<MediaWrapper>) = lifecycleScope.launch {
 
 fun MediaWrapper?.isMedia() = this != null && (type == MediaWrapper.TYPE_AUDIO || type == MediaWrapper.TYPE_VIDEO)
 fun MediaWrapper?.isBrowserMedia() = this != null && (isMedia() || type == MediaWrapper.TYPE_DIR || type == MediaWrapper.TYPE_PLAYLIST)
+fun MediaWrapper.trackNumberText() = if (trackNumber > 0) "$trackNumber." else ""
 
 fun Context.getAppSystemService(name: String) = applicationContext.getSystemService(name)!!
 
@@ -329,6 +330,10 @@ fun CharSequence.getPresenceDescriptionSpan(context: Context):SpannableString {
         string.setSpan(ImageSpan(context, R.drawable.ic_emoji_media_absent, DynamicDrawableSpan.ALIGN_CENTER), this.indexOf(fileReplacementMarker), this.indexOf(fileReplacementMarker)+3, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
     return string
+}
+
+fun Array<out CharSequence?>.firstNotNullAsSpannable(): SpannableString? {
+    return firstNotNullOfOrNull { it?.let(::SpannableString) }
 }
 
 fun Int.toPixel(): Int {
@@ -533,4 +538,45 @@ fun ViewPager2.findCurrentFragment(fragmentManager: FragmentManager): Fragment? 
  */
 fun ViewPager2.findFragmentAt(fragmentManager: FragmentManager, position: Int): Fragment? {
     return fragmentManager.findFragmentByTag("f$position")
+}
+
+/**
+ * Merges the current sorted mutable list with another sorted list based on a selected property.
+ *
+ * Both lists must be in ascending order using the same property.
+ *
+ * @param <T>       the type of elements in the list
+ * @param <R>       the type of the comparable property extracted by the selector
+ * @param otherList the list to be merged with the current list
+ * @param selector  a function to extract a comparable property from each element in the list
+ */
+fun <T, R : Comparable<R>> MutableList<T>.mergeSorted(otherList: List<T>, selector: (T) -> R?) {
+    mergeSorted(otherList, compareBy(selector))
+}
+/**
+ * Merges the current sorted mutable list with another sorted list using a custom comparator.
+ *
+ * Both lists must be in ascending order using the same sorting order
+ *
+ * @param <T>        the type of elements in the list
+ * @param otherList  the list to be merged with the current list
+ * @param comparator a comparator to determine the sorting order of elements
+ */
+fun <T> MutableList<T>.mergeSorted(otherList: List<T>, comparator: Comparator<T>) {
+    var thisIndex = 0
+    var otherIndex = 0
+
+    while (thisIndex < this.size && otherIndex < otherList.size) {
+        val thisItem = this[thisIndex]
+        val otherItem = otherList[otherIndex]
+
+        if (comparator.compare(thisItem, otherItem) > 0) {
+            this.add(thisIndex, otherItem)
+            otherIndex++
+        }
+        thisIndex++
+    }
+    // Add remaining elements from otherList
+    for (i in otherIndex until otherList.size)
+        this.add(otherList[i])
 }

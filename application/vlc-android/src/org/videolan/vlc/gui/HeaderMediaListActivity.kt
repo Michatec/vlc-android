@@ -342,7 +342,10 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
             invalidateActionMode()
         } else {
             if (searchView.visibility == View.VISIBLE) UiTools.setKeyboardVisibility(v, false)
-            MediaUtils.playTracks(this, viewModel.tracksProvider, position)
+            if (isPlaylist || Settings.getInstance(this).getBoolean(PLAYLIST_MODE_AUDIO, false))
+                MediaUtils.playTracks(this, viewModel.tracksProvider, position)
+            else
+                MediaUtils.openMedia(this, item as MediaWrapper)
         }
     }
 
@@ -368,6 +371,11 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
                     if (item.isFavorite) add(CTX_FAV_REMOVE) else add(CTX_FAV_ADD)
                     if (media.type == MediaWrapper.TYPE_STREAM || (media.type == MediaWrapper.TYPE_ALL && isSchemeHttpOrHttps(media.uri.scheme)))
                         addAll(CTX_COPY, CTX_RENAME)
+                    if (media.type == MediaWrapper.TYPE_AUDIO) {
+                        add(CTX_GO_TO_ARTIST)
+                        if (BuildConfig.DEBUG) Log.d("CtxPrep", "Artist id is: ${media.artistId}, album artist is: ${media.albumArtistId}")
+                        if (media.artistId != media.albumArtistId) add(CTX_GO_TO_ALBUM_ARTIST)
+                    }
                     else add(CTX_SHARE)
                 }
                 showContext(this, this, position, media, flags)
@@ -481,6 +489,7 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
             CTX_DELETE -> lifecycleScope.launch { removeItem(position, media) }
             CTX_APPEND -> MediaUtils.appendMedia(this, media.tracks)
             CTX_PLAY_NEXT -> MediaUtils.insertNext(this, media.tracks)
+            CTX_PLAY_ALL -> MediaUtils.playTracks(this, viewModel.tracksProvider, position, false)
             CTX_ADD_TO_PLAYLIST -> addToPlaylist(media.tracks, SavePlaylistDialog.KEY_NEW_TRACKS)
             CTX_SET_RINGTONE -> setRingtone(media)
             CTX_SHARE -> lifecycleScope.launch { share(media) }
@@ -501,6 +510,24 @@ open class HeaderMediaListActivity : AudioPlayerContainerActivity(), IEventsHand
                 media.isFavorite = option == CTX_FAV_ADD
             }
             CTX_ADD_SHORTCUT -> lifecycleScope.launch { createShortcut(media) }
+            CTX_GO_TO_ARTIST -> lifecycleScope.launch(Dispatchers.IO) {
+                val artist = if (media is Album) media.retrieveAlbumArtist() else (media as MediaWrapper).artist
+                val i = Intent(this@HeaderMediaListActivity, SecondaryActivity::class.java)
+                i.putExtra(SecondaryActivity.KEY_FRAGMENT, SecondaryActivity.ALBUMS_SONGS)
+                i.putExtra(AudioBrowserFragment.TAG_ITEM, artist)
+                i.putExtra(ARTIST_FROM_ALBUM, true)
+                i.flags = i.flags or Intent.FLAG_ACTIVITY_NO_HISTORY
+                startActivity(i)
+            }
+            CTX_GO_TO_ALBUM_ARTIST -> lifecycleScope.launch(Dispatchers.IO) {
+                val artist = (media as MediaWrapper).albumArtist
+                val i = Intent(this@HeaderMediaListActivity, SecondaryActivity::class.java)
+                i.putExtra(SecondaryActivity.KEY_FRAGMENT, SecondaryActivity.ALBUMS_SONGS)
+                i.putExtra(AudioBrowserFragment.TAG_ITEM, artist)
+                i.putExtra(ARTIST_FROM_ALBUM, true)
+                i.flags = i.flags or Intent.FLAG_ACTIVITY_NO_HISTORY
+                startActivity(i)
+            }
             else -> {}
         }
 

@@ -28,6 +28,7 @@ object Settings : SingletonHolder<SharedPreferences, Context>({ init(it.applicat
     var videoDoubleTapJumpDelay = 10
     var audioJumpDelay = 10
     var audioLongJumpDelay = 20
+    var audioShowTrackNumbers = MutableLiveData(false)
     var showHiddenFiles = false
     var showTrackNumber = true
     var tvFoldersFirst = true
@@ -54,6 +55,7 @@ object Settings : SingletonHolder<SharedPreferences, Context>({ init(it.applicat
         videoDoubleTapJumpDelay = prefs.getInt(KEY_VIDEO_DOUBLE_TAP_JUMP_DELAY, 10)
         audioJumpDelay = prefs.getInt(KEY_AUDIO_JUMP_DELAY, 10)
         audioLongJumpDelay = prefs.getInt(KEY_AUDIO_LONG_JUMP_DELAY, 20)
+        audioShowTrackNumbers.postValue(prefs.getBoolean(KEY_AUDIO_SHOW_TRACK_NUMBERS, false))
         showHiddenFiles = prefs.getBoolean(BROWSER_SHOW_HIDDEN_FILES, !tvUI)
         showTrackNumber = prefs.getBoolean(ALBUMS_SHOW_TRACK_NUMBER, true)
         tvFoldersFirst = prefs.getBoolean(TV_FOLDERS_FIRST, true)
@@ -115,6 +117,7 @@ const val KEY_VIDEO_DOUBLE_TAP_JUMP_DELAY = "video_double_tap_jump_delay"
 const val KEY_AUDIO_JUMP_DELAY = "audio_jump_delay"
 const val KEY_AUDIO_LONG_JUMP_DELAY = "audio_long_jump_delay"
 const val KEY_AUDIO_FORCE_SHUFFLE = "audio_force_shuffle"
+const val KEY_AUDIO_SHOW_TRACK_NUMBERS = "audio_show_track_numbers"
 
 
 // AudioPlayer
@@ -134,6 +137,7 @@ const val ML_SCAN_OFF = 1
 
 //Remote access
 const val KEY_ENABLE_REMOTE_ACCESS = "enable_remote_access"
+const val KEY_REMOTE_ACCESS_LAST_STATE_STOPPED = "remote_access_last_state_stopped"
 const val KEY_REMOTE_ACCESS_ML_CONTENT = "remote_access_medialibrary_content"
 const val REMOTE_ACCESS_FILE_BROWSER_CONTENT = "remote_access_file_browser_content"
 const val REMOTE_ACCESS_NETWORK_BROWSER_CONTENT = "remote_access_network_browser_content"
@@ -152,8 +156,8 @@ const val PREF_WIDGETS_TIPS_SHOWN = "widgets_tips_shown"
 const val PREF_RESTORE_VIDEO_TIPS_SHOWN = "pref_restore_video_tips_shown"
 
 const val PREF_TV_UI = "tv_ui"
-const val FORCE_PLAY_ALL_VIDEO = "force_play_all_video"
-const val FORCE_PLAY_ALL_AUDIO = "force_play_all_audio"
+const val PLAYLIST_MODE_VIDEO = "playlist_mode_video"
+const val PLAYLIST_MODE_AUDIO = "playlist_mode_audio"
 
 const val SCREEN_ORIENTATION = "screen_orientation"
 const val VIDEO_RESUME_TIME = "VideoResumeTime"
@@ -245,6 +249,11 @@ const val ALBUMS_SHOW_TRACK_NUMBER = "albums_show_track_number"
 
 //widgets
 const val WIDGETS_PREVIEW_PLAYING = "widgets_preview_playing"
+
+//OpenSubtitles
+const val KEY_OPEN_SUBTITLES_USER = "open_subtitles_user"
+const val KEY_OPEN_SUBTITLES_LIMIT = "open_subtitles_limit"
+
 
 const val KEY_SAFE_MODE_PIN = "safe_mode_pin"
 const val KEY_RESTRICT_SETTINGS = "restrict_settings"

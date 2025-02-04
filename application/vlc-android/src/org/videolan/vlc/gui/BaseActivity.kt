@@ -38,6 +38,7 @@ import org.videolan.vlc.gui.helpers.hf.PinCodeDelegate
 import org.videolan.vlc.gui.helpers.hf.checkPIN
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.util.FileUtils
+import org.videolan.vlc.util.Permissions
 import org.videolan.vlc.util.RemoteAccessUtils
 
 
@@ -56,7 +57,7 @@ abstract class BaseActivity : AppCompatActivity() {
     private var baseContextWrappingDelegate: AppCompatDelegate? = null
     private var resultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            FileUtils.getUri(result.data?.data)?.let { MediaUtils.openMediaNoUi(it) }
+            FileUtils.getUri(result.data?.data)?.let { MediaUtils.openMediaNoUi(this, it) }
         }
     }
 
@@ -91,6 +92,20 @@ abstract class BaseActivity : AppCompatActivity() {
                         startActivity(i)
                     }
                 }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String?>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == Permissions.FINE_STORAGE_PERMISSION_REQUEST_CODE) {
+            if (System.currentTimeMillis() -  Permissions.timeAsked < 300) {
+                //Answered really quick (not human) -> forwarding to app settings
+                Permissions.showAppSettingsPage(this)
             }
         }
     }
