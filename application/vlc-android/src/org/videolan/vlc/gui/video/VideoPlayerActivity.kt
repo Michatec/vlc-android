@@ -20,7 +20,6 @@
 
 package org.videolan.vlc.gui.video
 
-import android.R.attr.keycode
 import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.Activity
@@ -120,7 +119,9 @@ import org.videolan.libvlc.util.VLCVideoLayout
 import org.videolan.medialibrary.MLServiceLocator
 import org.videolan.medialibrary.Tools
 import org.videolan.medialibrary.interfaces.Medialibrary
+import org.videolan.medialibrary.interfaces.media.Bookmark
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
+import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.resources.AndroidDevices
 import org.videolan.resources.AppContextProvider
 import org.videolan.resources.EXIT_PLAYER
@@ -185,7 +186,10 @@ import org.videolan.vlc.gui.DialogActivity
 import org.videolan.vlc.gui.audio.EqualizerFragment
 import org.videolan.vlc.gui.audio.PlaylistAdapter
 import org.videolan.vlc.gui.browser.EXTRA_MRL
+import org.videolan.vlc.gui.dialogs.CONFIRM_BOOKMARK_RENAME_DIALOG_RESULT
 import org.videolan.vlc.gui.dialogs.PlaybackSpeedDialog
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_NEW_NAME
 import org.videolan.vlc.gui.dialogs.RenderersDialog
 import org.videolan.vlc.gui.dialogs.SleepTimerDialog
 import org.videolan.vlc.gui.dialogs.VLCBottomSheetDialogFragment.Companion.shouldInterceptRemote
@@ -269,6 +273,12 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
     lateinit var windowLayoutInfo: WindowLayoutInfo
     private var currentConfirmationDialog: AlertDialog? = null
+    val resumeDialogObserver: (t: WaitConfirmation?) -> Unit = {
+        if (it != null)
+            showConfirmResumeDialog(it)
+        else
+            currentConfirmationDialog?.dismiss()
+    }
 
     /**
      * For uninterrupted switching between audio and video mode
@@ -657,6 +667,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 }
             }
         })
+        supportFragmentManager.setFragmentResultListener(CONFIRM_BOOKMARK_RENAME_DIALOG_RESULT, this) { requestKey, bundle ->
+            val media = bundle.parcelable<MediaLibraryItem>(RENAME_DIALOG_MEDIA) ?: return@setFragmentResultListener
+            val name = bundle.getString(RENAME_DIALOG_NEW_NAME) ?: return@setFragmentResultListener
+            overlayDelegate.bookmarkListDelegate?.renameBookmark(media as Bookmark, name)
+        }
     }
 
     override fun onAttachedToWindow() {
@@ -747,7 +762,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         setIntent(intent)
         if (playbackStarted) service?.run {
             if (overlayDelegate.isHudRightBindingInitialized()) {
-                overlayDelegate.hudRightBinding.playerOverlayTitle.text = currentMediaWrapper?.title
+                overlayDelegate.setTitle(currentMediaWrapper?.title)
                         ?: return@run
             }
             var uri: Uri? = if (intent.hasExtra(PLAY_EXTRA_ITEM_LOCATION)) {
@@ -1190,9 +1205,9 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 resultIntent.putExtra(EXTRA_POSITION, time)
                 resultIntent.putExtra(EXTRA_DURATION, length)
             }
-            setResult(resultCode, resultIntent)
-            finish()
         }
+        setResult(resultCode, resultIntent)
+        finish()
     }
 
     private fun exitOK() {
@@ -1707,7 +1722,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         }
         setESTracks()
         if (overlayDelegate.isHudRightBindingInitialized() && overlayDelegate.hudRightBinding.playerOverlayTitle.length() == 0)
-            overlayDelegate.hudRightBinding.playerOverlayTitle.text = mw.title
+            overlayDelegate.setTitle(mw.title)
         // Get possible subtitles
         observeDownloadedSubtitles()
         optionsDelegate?.setup()
@@ -1731,6 +1746,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             val surfaceView = rootView?.findViewById<View>(R.id.surface_video) as SurfaceView
             FrameRateManager(this, service!!).matchFrameRate(surfaceView, window)
         }
+        overlayDelegate.updatePlaybackSpeedChip()
     }
 
     private fun encounteredError() {
@@ -1933,12 +1949,18 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         overlayDelegate.togglePlaylist()
     }
 
+    fun jump (forward:Boolean, long: Boolean) {
+        val jumpDelay = if (long) Settings.videoLongJumpDelay else Settings.videoJumpDelay
+        val delay = if (forward) jumpDelay * 1000 else -(jumpDelay * 1000)
+        touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -delay  else delay)
+    }
+
     override fun onClick(v: View) {
         when (v.id) {
             R.id.orientation_toggle -> toggleOrientationLock()
             R.id.playlist_toggle -> overlayDelegate.togglePlaylist()
-            R.id.player_overlay_forward -> touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -Settings.videoJumpDelay * 1000  else Settings.videoJumpDelay * 1000)
-            R.id.player_overlay_rewind -> touchDelegate.seekDelta(if (LocaleUtil.isRtl()) Settings.videoJumpDelay * 1000  else -Settings.videoJumpDelay * 1000)
+            R.id.player_overlay_forward -> jump(forward = true, long = false)
+            R.id.player_overlay_rewind -> jump(forward = false, long = false)
             R.id.ab_repeat_add_marker -> service?.playlistManager?.setABRepeatValue(
                 service?.playlistManager?.getCurrentMedia(), overlayDelegate.hudBinding.playerOverlaySeekbar.progress.toLong())
             R.id.ab_repeat_reset -> service?.playlistManager?.resetABRepeatValues(service?.playlistManager?.getCurrentMedia())
@@ -1981,6 +2003,13 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             R.id.orientation_quick_action -> {
                 overlayDelegate.nextOrientation()
             }
+            R.id.player_overlay_title_warning -> {
+                val snackbar = UiTools.snackerMessageInfinite(this, getString(R.string.player_title_fd_warning))
+                snackbar?.setAction(R.string.ok) {
+                    snackbar.dismiss()
+                }
+                snackbar?.show()
+            }
         }
     }
 
@@ -1991,11 +2020,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 return true
             }
             R.id.player_overlay_forward -> {
-                touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -Settings.videoLongJumpDelay * 1000  else Settings.videoLongJumpDelay * 1000)
+                jump(forward = true, long = true)
                 return true
             }
             R.id.player_overlay_rewind -> {
-                touchDelegate.seekDelta(if (LocaleUtil.isRtl()) Settings.videoLongJumpDelay * 1000  else -Settings.videoLongJumpDelay * 1000)
+                jump(forward = false, long = true)
                 return true
             }
         }
@@ -2244,7 +2273,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             }
             if (itemTitle != null) title = itemTitle
             if (overlayDelegate.isHudRightBindingInitialized()) {
-                overlayDelegate.hudRightBinding.playerOverlayTitle.text = title
+                overlayDelegate.setTitle(title)
             }
 
             if (wasPaused) {
@@ -2485,15 +2514,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 if (volSave > 100 && service.volume != volSave) service.setVolume(volSave)
             }
             service.addCallback(this)
-            service.playlistManager.waitForConfirmation.observe(this) {
-                if (it != null)
-                    showConfirmResumeDialog(it)
-                else
-                    currentConfirmationDialog?.dismiss()
-            }
+            service.playlistManager.waitForConfirmation.observe(this, resumeDialogObserver)
             //if (isTalkbackIsEnabled()) overlayDelegate.showOverlayTimeout(OVERLAY_INFINITE)
         } else if (this.service != null) {
             this.service?.removeCallback(this)
+            this.service?.playlistManager?.waitForConfirmation?.removeObserver(resumeDialogObserver)
             this.service = null
             handler.sendEmptyMessage(AUDIO_SERVICE_CONNECTION_FAILED)
             removeDownloadedSubtitlesObserver()

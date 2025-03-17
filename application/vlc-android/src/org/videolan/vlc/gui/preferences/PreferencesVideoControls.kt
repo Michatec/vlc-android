@@ -24,6 +24,7 @@ package org.videolan.vlc.gui.preferences
 
 import android.content.SharedPreferences
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import androidx.core.content.getSystemService
 import androidx.preference.CheckBoxPreference
@@ -42,6 +43,7 @@ import org.videolan.tools.FASTPLAY_SPEED
 import org.videolan.tools.KEY_VIDEO_DOUBLE_TAP_JUMP_DELAY
 import org.videolan.tools.KEY_VIDEO_JUMP_DELAY
 import org.videolan.tools.KEY_VIDEO_LONG_JUMP_DELAY
+import org.videolan.tools.LOCK_USE_SENSOR
 import org.videolan.tools.POPUP_KEEPSCREEN
 import org.videolan.tools.SCREENSHOT_MODE
 import org.videolan.tools.Settings
@@ -73,9 +75,11 @@ class PreferencesVideoControls : BasePreferenceFragment(), SharedPreferences.OnS
         findPreference<Preference>(ENABLE_BRIGHTNESS_GESTURE)?.isVisible = AndroidDevices.hasTsp
         findPreference<Preference>(POPUP_KEEPSCREEN)?.isVisible = !AndroidDevices.isAndroidTv && !AndroidUtil.isOOrLater
         findPreference<Preference>(KEY_VIDEO_DOUBLE_TAP_JUMP_DELAY)?.title = getString(if (AndroidDevices.isAndroidTv) R.string.video_key_jump_delay else R.string.video_double_tap_jump_delay)
+        findPreference<Preference>(LOCK_USE_SENSOR)?.isVisible = !AndroidDevices.isAndroidTv
+
         updateHudTimeoutSummary()
         val audiomanager = requireActivity().getSystemService<AudioManager>()!!
-        if (audiomanager.isVolumeFixed) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || audiomanager.isVolumeFixed) {
             audioBoostPref?.isChecked = false
             audioBoostPref?.isEnabled = false
             audioBoostPref?.summary = getString(R.string.system_volume_disabled, audioBoostPref?.summary)

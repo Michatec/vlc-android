@@ -31,8 +31,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import org.videolan.resources.VLCInstance
-import org.videolan.tools.KEY_PLAYBACK_RATE_VIDEO
-import org.videolan.tools.KEY_PLAYBACK_SPEED_PERSIST_VIDEO
 import org.videolan.tools.LOCK_USE_SENSOR
 import org.videolan.tools.POPUP_FORCE_LEGACY
 import org.videolan.tools.SAVE_BRIGHTNESS
@@ -55,7 +53,6 @@ class PreferencesVideo : BasePreferenceFragment(), SharedPreferences.OnSharedPre
         findPreference<Preference>("enable_clone_mode")?.isVisible = false
         findPreference<Preference>(SAVE_BRIGHTNESS)?.isVisible = false
         findPreference<Preference>(POPUP_FORCE_LEGACY)?.isVisible = false
-        findPreference<Preference>(LOCK_USE_SENSOR)?.isVisible = false
     }
 
     override fun onStart() {
@@ -77,8 +74,6 @@ class PreferencesVideo : BasePreferenceFragment(), SharedPreferences.OnSharedPre
                     restartMediaPlayer()
                 }
             }
-
-            KEY_PLAYBACK_SPEED_PERSIST_VIDEO -> sharedPreferences.putSingle(KEY_PLAYBACK_RATE_VIDEO, 1.0f)
         }
     }
 }

@@ -124,6 +124,7 @@ import org.videolan.resources.CUSTOM_ACTION_SHUFFLE
 import org.videolan.resources.CUSTOM_ACTION_SPEED
 import org.videolan.resources.DRIVING_MODE_APP_PKG
 import org.videolan.resources.EXTRA_CUSTOM_ACTION_ID
+import org.videolan.resources.EXTRA_PLAY_ONLY
 import org.videolan.resources.EXTRA_SEARCH_BUNDLE
 import org.videolan.resources.EXTRA_SEEK_DELAY
 import org.videolan.resources.PLAYBACK_SLOT_RESERVATION_SKIP_TO_NEXT
@@ -262,6 +263,13 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      * [MediaSessionCompat.Callback] callbacks even if the service is killed
      */
     lateinit var mediaBrowserCompat:MediaBrowserCompat
+
+    /**
+     * Once a media has shown the speed action once,
+     * continue showing it until the media changes even if the other conditions are not met
+     */
+    private var forceAutoShowSpeed:Pair<String?, Boolean> = Pair(null, false)
+
 
     private val receiver = object : BroadcastReceiver() {
         private var wasPlaying = false
@@ -855,7 +863,10 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             ACTION_REMOTE_PLAY,
             ACTION_REMOTE_LAST_PLAYLIST -> {
                 if (playlistManager.hasCurrentMedia()) {
-                    if (isPlaying) pause()
+                    if (intent.getBooleanExtra(EXTRA_PLAY_ONLY, false)) {
+                        if (!isPlaying)
+                            play()
+                    } else if (isPlaying) pause()
                     else play()
                 } else loadLastAudioPlaylist()
             }
@@ -1332,7 +1343,10 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     }
 
     private fun addCustomSpeedActions(pscb: PlaybackStateCompat.Builder, showSpeedActions: Boolean = true) {
-        if (speed != 1.0F || showSpeedActions) {
+        if (speed != 1.0F || showSpeedActions || ( currentMediaWrapper?.uri != null && forceAutoShowSpeed.first == currentMediaWrapper?.uri?.toString() && forceAutoShowSpeed.second)) {
+            currentMediaWrapper?.uri?.let {
+                forceAutoShowSpeed = Pair(it.toString(), true)
+            }
             val speedIcons = hashMapOf(
                     0.50f to R.drawable.ic_auto_speed_0_50,
                     0.80f to R.drawable.ic_auto_speed_0_80,
@@ -1345,7 +1359,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             val speedResId = speedIcons[speedIcons.keys.minByOrNull { (speed - it).absoluteValue }]
                     ?: R.drawable.ic_auto_speed
             pscb.addCustomAction(CUSTOM_ACTION_SPEED, getString(R.string.playback_speed), speedResId)
-        }
+        } else forceAutoShowSpeed = Pair(null, false)
     }
 
     fun notifyTrackChanged() {
@@ -1747,7 +1761,9 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     @MainThread
     fun setRate(rate: Float, save: Boolean) {
         playlistManager.player.setRate(rate, save)
-        publishState()
+        lifecycleScope.launch(Dispatchers.Main) {
+            publishState()
+        }
     }
 
     @MainThread
@@ -2001,8 +2017,10 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             context.launchForeground(serviceIntent)
         }
 
-        fun loadLastAudio(context: Context) {
-            val i = Intent(ACTION_REMOTE_LAST_PLAYLIST, null, context, PlaybackService::class.java)
+        fun loadLastAudio(context: Context, playOnly: Boolean = false) {
+            val i = Intent(ACTION_REMOTE_LAST_PLAYLIST, null, context, PlaybackService::class.java).apply {
+                if (playOnly) putExtra(EXTRA_PLAY_ONLY, true)
+            }
             context.launchForeground(i)
         }
 

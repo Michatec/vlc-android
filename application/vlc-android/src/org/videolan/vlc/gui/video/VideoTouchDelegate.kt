@@ -112,7 +112,7 @@ class VideoTouchDelegate(private val player: VideoPlayerActivity,
     private val seekRewindSecond: ImageView by lazy { player.findViewById(R.id.seekRewindSecond) }
     private val seekContainer: ConstraintLayout by lazy { player.findViewById(R.id.seekContainer) }
     private val seekBackground: FrameLayout by lazy { player.findViewById(R.id.seek_background) }
-    private val gestureSafetyMargin = 48.dp.toFloat()
+    private val gestureSafetyMargin = 24.dp.toFloat()
 
     companion object {
         private const val TAG = "VLC/VideoTouchDelegate"
@@ -195,7 +195,7 @@ class VideoTouchDelegate(private val player: VideoPlayerActivity,
                         // Mouse events for the core
                         player.sendMouseEvent(MotionEvent.ACTION_DOWN, xTouch, yTouch)
                         val fastPlayRunnable = Runnable {
-                            if (touchAction == TOUCH_NONE) {
+                            if (touchAction == TOUCH_NONE && player.service != null) {
                                 savedRate = player.service!!.rate
                                 player.service?.setRate(org.videolan.tools.Settings.fastplaySpeed, false)
                                 showFastPlay()
@@ -370,11 +370,13 @@ class VideoTouchDelegate(private val player: VideoPlayerActivity,
     }
 
     private fun doVerticalTouchAction(y_changed: Float) {
+        if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "doVerticalTouchAction $y_changed // ${screenConfig.metrics.widthPixels} // ${3 * screenConfig.metrics.widthPixels / 7f} // $touchX")
         val rightAction = touchX.toInt() > 4 * screenConfig.metrics.widthPixels / 7f
         val leftAction = !rightAction && touchX.toInt() < 3 * screenConfig.metrics.widthPixels / 7f
         if (!leftAction && !rightAction) return
         val audio = touchControls and TOUCH_FLAG_AUDIO_VOLUME != 0
         val brightness = touchControls and TOUCH_FLAG_BRIGHTNESS != 0
+        if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "doVerticalTouchAction brightness: $brightness // $leftAction")
         if (!audio && !brightness)
             return
         if (rightAction) {
@@ -472,6 +474,7 @@ class VideoTouchDelegate(private val player: VideoPlayerActivity,
     }
 
     private fun doBrightnessTouch(ychanged: Float) {
+        if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "doBrightnessTouch: $initInAllowedBounds")
         if (!initInAllowedBounds) return
         if (touchAction != TOUCH_NONE && touchAction != TOUCH_BRIGHTNESS) return
         if (isFirstBrightnessGesture) initBrightnessTouch()
@@ -529,7 +532,7 @@ class VideoTouchDelegate(private val player: VideoPlayerActivity,
             var position = player.time + delta
             if (position < 0) position = 0
             if (position > service.length) position = service.length
-            player.seek(position)
+            player.seek(position, fast = false)
             val sb = StringBuilder()
             val seekForward = delta >= 0
 

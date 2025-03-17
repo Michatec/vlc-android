@@ -255,8 +255,6 @@
     <string name="audio_resume_playback_title">Roll-istor ar roll-lenn aodioioù</string>
     <string name="audio_resume_playback_warning">Lazhañ roll-istor ar roll-lenn aodioù a c\'hallfe degas kudennoù emzalc\'h \'zo.\nUr wech lazhet ne c\'hallit ket adkregiñ gant al lenn diwar :\n\n\t- un aparailh bluetooth\n\t- ar widget\n\t- ar gemennadenn media</string>
     <string name="audio_resume_playback_summary">Aotren enrollañ ar roll-lenn aodioioù evit adkregiñ diwezhatoc\'h</string>
-    <string name="playback_speed_title">Enrollañ tizh al lenn</string>
-    <string name="playback_speed_summary">Mirout tizh al lenn etre ar mediaoù</string>
 
     <string name="play_button">Bouton Lenn</string>
 
@@ -277,7 +275,7 @@
     <string name="lock_orientation_description">Pouezit evit morailhañ/divorailhañ an tuadur</string>
     <string name="aspect_ratio">Feur an neuz</string>
     <string name="aspect_ratio_description">Pouezit evit cheñch ment ar video</string>
-    <string name="advanced_options">Dibarzhioù kemplesoc\'h</string>
+    <string name="advanced_options">Dibarzhioù araokaet</string>
     <string name="advanced_options_description">Evel tizh al lenn, ar mod adlenn, ...</string>
     <string name="tips_swipe">Linkañ en nec\'h pe en traoñ</string>
     <string name="tips_swipe_horizontal">Linkañ a-gleiz pe a-zehou</string>

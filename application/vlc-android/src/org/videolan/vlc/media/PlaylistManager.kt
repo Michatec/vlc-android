@@ -58,10 +58,13 @@ import org.videolan.tools.HTTP_USER_AGENT
 import org.videolan.tools.KEY_AUDIO_CONFIRM_RESUME
 import org.videolan.tools.KEY_AUDIO_FORCE_SHUFFLE
 import org.videolan.tools.KEY_INCOGNITO
-import org.videolan.tools.KEY_PLAYBACK_RATE
-import org.videolan.tools.KEY_PLAYBACK_RATE_VIDEO
-import org.videolan.tools.KEY_PLAYBACK_SPEED_PERSIST
-import org.videolan.tools.KEY_PLAYBACK_SPEED_PERSIST_VIDEO
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL
+import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_VIDEO_APP_SWITCH
 import org.videolan.tools.KEY_VIDEO_CONFIRM_RESUME
 import org.videolan.tools.MEDIA_SHUFFLING
 import org.videolan.tools.PLAYBACK_HISTORY
@@ -351,7 +354,9 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
 
     @MainThread
     fun next(force : Boolean = false) {
-        mediaList.getMedia(currentIndex)?.let { if (it.type == MediaWrapper.TYPE_VIDEO) saveMediaMeta() }
+        mediaList.getMedia(currentIndex)?.let {
+            if (it.type == MediaWrapper.TYPE_VIDEO || it.isPodcast) saveMediaMeta()
+        }
         val size = mediaList.size()
         if (force || repeating.value != PlaybackStateCompat.REPEAT_MODE_ONE) {
             previous.push(currentIndex)
@@ -506,16 +511,14 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             val start: Long
             if (isVideoPlaying) {
                 start = if (forceRestart
-                    || videoResumeStatus == ResumeStatus.NEVER
-                    || !Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) 0L else getStartTime(mw)
+                    || videoResumeStatus == ResumeStatus.NEVER) 0L else getStartTime(mw)
                 if (!forceResume && videoResumeStatus == ResumeStatus.ASK && start > 0 && isAppStarted()) {
                     waitForConfirmation.postValue(WaitConfirmation(mw.title, index, flags))
                     return
                 }
             } else {
                 start = if (forceRestart
-                    || audioResumeStatus == ResumeStatus.NEVER
-                    || !Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) 0L else getStartTime(mw)
+                    || audioResumeStatus == ResumeStatus.NEVER) 0L else getStartTime(mw)
                 if (!forceResume && audioResumeStatus == ResumeStatus.ASK && start > 0 && isAppStarted()) {
                     val confirmation = WaitConfirmation(mw.title, index, flags)
                     waitForConfirmationAudio.postValue(confirmation)
@@ -641,7 +644,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     fun saveMediaMeta(end:Boolean = false) = launch(start = CoroutineStart.UNDISPATCHED) outerLaunch@ {
-        if (!Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) return@outerLaunch
         if (endReachedFor != null && endReachedFor == getCurrentMedia()?.uri.toString() && !end) return@outerLaunch
         val titleIdx = player.getTitleIdx()
         val currentMedia = getCurrentMedia() ?: return@outerLaunch
@@ -672,7 +674,18 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                                 Medialibrary.ML_SET_TIME_ERROR -> {
                                 }
                                 Medialibrary.ML_SET_TIME_END, Medialibrary.ML_SET_TIME_BEGIN -> media.time = 0
-                                Medialibrary.ML_SET_TIME_AS_IS -> media.time = time
+                                Medialibrary.ML_SET_TIME_AS_IS -> {
+                                    media.time = time
+                                    // the Medialibrary sometimes doesn't have the media's length,
+                                    // and won't know that the file has ended. This forces the ML
+                                    // to mark the file as finished and reset it's time
+                                    if (time == length) {
+                                        medialibrary.setLastTime(media.id, 0)
+                                        media.seen = 1L
+                                        media.playCount += 1
+                                        media.time = 0
+                                    }
+                                }
                             }
                         } catch (e: NullPointerException) {
                             VLCCrashHandler.saveLog(e, "NullPointerException in PlaylistManager saveMediaMeta")
@@ -680,7 +693,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                     }
                 }
             if (media.type != MediaWrapper.TYPE_VIDEO && !canSwitchToVideo && !media.isPodcast) skipMediaUpdateRefresh = true
-            media.setStringMeta(MediaWrapper.META_SPEED, rate.toString())
 
         }
     }
@@ -722,21 +734,36 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             player.setSpuTrack(media.getMetaLong(MediaWrapper.META_SUBTITLE_TRACK).toString())
             player.setSpuDelay(media.getMetaLong(MediaWrapper.META_SUBTITLE_DELAY))
-            restoreSpeed(media)
-        } else if (media.isPodcast) {
-            restoreSpeed(media)
         }
+        restoreSpeed(media)
     }
 
+    /**
+     * Restore the playback speed of the current media.
+     *
+     * @param media
+     */
     private fun restoreSpeed(media: MediaWrapper) {
-        val rateString = if (settings.getBoolean(PLAYBACK_HISTORY, true)) media.getMetaString(MediaWrapper.META_SPEED) else null
-        if (!rateString.isNullOrEmpty()) {
-            player.setRate(rateString.toFloat(), false)
+        val incognitoMode = settings.getBoolean(KEY_INCOGNITO, false)
+        val playbackSpeedModeAll = settings.getBoolean(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL, false)
+        val playbackRate = when {
+            incognitoMode && playbackSpeedModeAll -> settings.getFloat(if (player.isVideoPlaying()) KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE else KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE, 1.0f)
+            //restore all
+            playbackSpeedModeAll -> settings.getFloat(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE, 1.0f)
+            incognitoMode -> 1F
+            //restore one
+            else -> try {
+                media.getMetaString(MediaWrapper.META_SPEED).toFloat()
+            } catch (e: Exception) {
+                1F
+            }
         }
+        player.setRate(playbackRate, false)
     }
 
     @Synchronized
     fun saveCurrentMedia(forceVideo:Boolean = false) {
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         val media = getCurrentMedia() ?: return
         val isAudio = isAudioList() || forceVideo
         if (media.uri.scheme.isSchemeFD()) {
@@ -751,9 +778,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         val saveVideoPlayQueue = settings.getBoolean(VIDEO_RESUME_PLAYBACK, true)
         if (!isAudio && saveVideoPlayQueue) {
             settings.putSingle(KEY_CURRENT_MEDIA_RESUME, media.location)
-            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_TITLE, media.title ?: "")
-            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artistName ?: "")
-            settings.putSingle(KEY_CURRENT_AUDIO_RESUME_THUMB, media.artworkURL ?: "")
+            if (Settings.getInstance(ctx).getString(KEY_VIDEO_APP_SWITCH, "0") == "1") {
+                settings.putSingle(KEY_CURRENT_AUDIO_RESUME_TITLE, media.title ?: "")
+                settings.putSingle(KEY_CURRENT_AUDIO_RESUME_ARTIST, media.artistName ?: "")
+                settings.putSingle(KEY_CURRENT_AUDIO_RESUME_THUMB, media.artworkURL ?: "")
+            }
             settings.putSingle(KEY_CURRENT_MEDIA, media.location)
         }
         if (isAudio && saveAudioPlayQueue) {
@@ -766,6 +795,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     suspend fun saveMediaList(forceVideo:Boolean = false) {
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         val currentMedia = getCurrentMedia() ?: return
         if (currentMedia.uri.scheme.isSchemeFD()) return
         val locations = StringBuilder()
@@ -959,6 +989,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
 
     @Synchronized
     private fun savePosition(reset: Boolean = false, video: Boolean = false) {
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         if (!hasMedia()) return
         settings.edit {
             val audio = !video && isAudioList()
@@ -1202,10 +1233,10 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                     }
                 }
                 MediaPlayer.Event.SeekableChanged -> {
-                    val playbackRate = if (event.seekable && settings.getBoolean(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_PERSIST_VIDEO else KEY_PLAYBACK_SPEED_PERSIST, false)) {
-                        settings.getFloat(if (player.isVideoPlaying()) KEY_PLAYBACK_RATE_VIDEO else KEY_PLAYBACK_RATE, 1.0f)
-                    } else 1.0f
-                    player.setRate(playbackRate, false)
+                    if (event.seekable)
+                        getCurrentMedia()?.let { media ->
+                            restoreSpeed(media)
+                        }
                 }
                 MediaPlayer.Event.ESSelected -> {
                     getCurrentMedia()?.let { media ->

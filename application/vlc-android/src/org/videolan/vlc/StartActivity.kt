@@ -64,6 +64,7 @@ import org.videolan.tools.AppScope
 import org.videolan.tools.BETA_WELCOME
 import org.videolan.tools.KEY_CURRENT_SETTINGS_VERSION
 import org.videolan.tools.KEY_TV_ONBOARDING_DONE
+import org.videolan.tools.PREF_SHOW_VIDEO_SETTINGS_DISCLAIMER
 import org.videolan.tools.Settings
 import org.videolan.tools.awaitAppIsForegroung
 import org.videolan.tools.getContextWithLocale
@@ -183,6 +184,7 @@ class StartActivity : FragmentActivity() {
         val tv = showTvUi()
         if (upgrade && (tv || !firstRun)) settings.putSingle(PREF_FIRST_RUN, currentVersionNumber)
         val removeOldDevices = savedVersionNumber in 3028201..3028399
+        settings.putSingle(PREF_SHOW_VIDEO_SETTINGS_DISCLAIMER, savedVersionNumber < 3060330 && !firstRun)
         // Route search query
         if (Intent.ACTION_SEARCH == action || ACTION_SEARCH_GMS == action) {
             intent.setClassName(applicationContext, if (tv) TV_SEARCH_ACTIVITY else MOBILE_SEARCH_ACTIVITY)
@@ -230,9 +232,10 @@ class StartActivity : FragmentActivity() {
             } else {
                 val target = idFromShortcut
                 val service = PlaybackService.instance
-                if (target == R.id.ml_menu_last_playlist)
-                    PlaybackService.loadLastAudio(this)
-                else if (service != null && service.isInPiPMode.value == true) {
+                if (target == R.id.ml_menu_last_playlist) {
+                    PlaybackService.loadLastAudio(this, true)
+                    startApplication(tv, firstRun, upgrade, R.id.nav_audio, removeOldDevices)
+                } else if (service != null && service.isInPiPMode.value == true) {
                     service.isInPiPMode.value = false
                     val startIntent = Intent(this, VideoPlayerActivity::class.java)
                     startIntent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
@@ -297,7 +300,12 @@ class StartActivity : FragmentActivity() {
         }
         // Remove FLAG_ACTIVITY_FORWARD_RESULT that is incompatible with startActivityForResult
         intent.flags = Intent.FLAG_ACTIVITY_FORWARD_RESULT.inv() and intent.flags
-        if (Permissions.canReadStorage(applicationContext) || getStoragePermission()) when {
+
+        // If data shared with content scheme then it should be from a provider and might
+        // be read without permissions.
+        // If not should check for permission, and ask them if we don't have them
+        if ((intent.data != null && intent.data!!.scheme == "content" && FileUtils.getUri(intent.data) != null)
+            || (Permissions.canReadStorage(applicationContext) || getStoragePermission())) when {
             intent.type?.startsWith("video") == true -> try {
                 startActivityForResult(intent.setClass(this@StartActivity, VideoPlayerActivity::class.java).apply { putExtra(VideoPlayerActivity.FROM_EXTERNAL, true) }, PROPAGATE_RESULT, Util.getFullScreenBundle())
                 return@launch

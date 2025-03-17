@@ -44,8 +44,10 @@ import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.ACTIVITY_RESULT_OPEN
 import org.videolan.resources.ACTIVITY_RESULT_PREFERENCES
 import org.videolan.resources.ACTIVITY_RESULT_SECONDARY
+import org.videolan.resources.CRASH_HAPPENED
 import org.videolan.resources.EXTRA_TARGET
 import org.videolan.tools.KEY_INCOGNITO
+import org.videolan.tools.KEY_LAST_SESSION_CRASHED
 import org.videolan.tools.KEY_MEDIALIBRARY_AUTO_RESCAN
 import org.videolan.tools.KEY_SHOW_UPDATE
 import org.videolan.tools.PERMISSION_NEVER_ASK
@@ -71,7 +73,6 @@ import org.videolan.vlc.gui.helpers.INavigator
 import org.videolan.vlc.gui.helpers.Navigator
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.isTablet
-import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
 import org.videolan.vlc.gui.video.VideoGridFragment
 import org.videolan.vlc.interfaces.Filterable
 import org.videolan.vlc.interfaces.IRefreshable
@@ -146,6 +147,28 @@ class MainActivity : ContentActivity(),
                     arguments = bundleOf(UPDATE_URL to url, UPDATE_DATE to date.time)
                 }
                 updateDialog.show(supportFragmentManager, "fragment_update")
+            }
+        }
+        if (settings.getBoolean(KEY_LAST_SESSION_CRASHED, false)) {
+            settings.putSingle(KEY_LAST_SESSION_CRASHED, false)
+            if (BuildConfig.BETA) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(resources.getString(R.string.report_crash))
+                    .setMessage(resources.getString(R.string.serious_crash))
+                    .setPositiveButton(R.string.send_log) { _, _ ->
+                        startActivity(
+                            Intent(applicationContext, FeedbackActivity::class.java)
+                                .apply {
+                                    putExtra(CRASH_HAPPENED, true)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                        )
+                    }
+                    .setNegativeButton(R.string.cancel) { _, _ ->
+
+                    }
+                    .show()
+
             }
         }
 
@@ -263,9 +286,7 @@ class MainActivity : ContentActivity(),
             }
             R.id.incognito_mode -> {
                 lifecycleScope.launch {
-                    if (showPinIfNeeded()) return@launch
-                    Settings.getInstance (this@MainActivity).putSingle(KEY_INCOGNITO, !Settings.getInstance(this@MainActivity).getBoolean(KEY_INCOGNITO, false))
-                    item.isChecked = !item.isChecked
+                    if (!UiTools.updateIncognitoMode(this@MainActivity, item)) return@launch
                     updateIncognitoModeIcon()
                 }
                 true

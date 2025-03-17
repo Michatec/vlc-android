@@ -29,6 +29,7 @@ const val EXTRA_PARSE = "extra_parse"
 const val EXTRA_TARGET = "extra_parse"
 const val EXTRA_FOR_ESPRESSO = "extra_for_espresso"
 const val EXTRA_REMOVE_DEVICE = "extra_remove_device"
+const val EXTRA_PLAY_ONLY = "extra_play_only"
 
 //UI Navigation
 const val ID_VIDEO = "video"
@@ -218,6 +219,7 @@ const val TYPE_LOCAL_FAV = 1
 //Crash reporting
 const val CRASH_ML_CTX = "crash_ml_ctx"
 const val CRASH_ML_MSG = "crash_ml_msg"
+const val CRASH_HAPPENED = "crash_happened"
 
 fun String.buildPkgString() = "${BuildConfig.APP_ID}.$this"
 

@@ -39,10 +39,19 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.renderscript.*
+import android.renderscript.Allocation
+import android.renderscript.Element
+import android.renderscript.RSInvalidStateException
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
 import android.text.TextUtils
-import android.view.*
-import android.view.animation.*
+import android.view.DragEvent
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.TextView
@@ -55,6 +64,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.view.ActionMode
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.content.getSystemService
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -71,7 +81,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nl.dionsegijn.konfetti.core.Party
 import nl.dionsegijn.konfetti.core.Position
 import nl.dionsegijn.konfetti.core.Rotation
@@ -83,19 +96,67 @@ import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.medialibrary.MLServiceLocator
 import org.videolan.medialibrary.Tools
 import org.videolan.medialibrary.interfaces.Medialibrary
-import org.videolan.medialibrary.interfaces.media.*
+import org.videolan.medialibrary.interfaces.media.Album
+import org.videolan.medialibrary.interfaces.media.Artist
+import org.videolan.medialibrary.interfaces.media.Folder
+import org.videolan.medialibrary.interfaces.media.Genre
+import org.videolan.medialibrary.interfaces.media.MediaWrapper
+import org.videolan.medialibrary.interfaces.media.Playlist
+import org.videolan.medialibrary.interfaces.media.VideoGroup
 import org.videolan.medialibrary.media.MediaLibraryItem
-import org.videolan.resources.*
+import org.videolan.resources.ACTION_DISCOVER_DEVICE
+import org.videolan.resources.AppContextProvider
+import org.videolan.resources.CATEGORY_ALBUMS
+import org.videolan.resources.CATEGORY_ARTISTS
+import org.videolan.resources.CATEGORY_GENRES
+import org.videolan.resources.CATEGORY_NOW_PLAYING
+import org.videolan.resources.CATEGORY_NOW_PLAYING_PIP
+import org.videolan.resources.CATEGORY_SONGS
+import org.videolan.resources.EXTRA_PATH
+import org.videolan.resources.HEADER_DIRECTORIES
+import org.videolan.resources.HEADER_MOVIES
+import org.videolan.resources.HEADER_NETWORK
+import org.videolan.resources.HEADER_PERMISSION
+import org.videolan.resources.HEADER_PLAYLISTS
+import org.videolan.resources.HEADER_SERVER
+import org.videolan.resources.HEADER_STREAM
+import org.videolan.resources.HEADER_TV_SHOW
+import org.videolan.resources.HEADER_VIDEO
+import org.videolan.resources.ID_ABOUT_TV
+import org.videolan.resources.ID_REMOTE_ACCESS
+import org.videolan.resources.ID_SETTINGS
+import org.videolan.resources.ID_SPONSOR
+import org.videolan.resources.TAG_ITEM
+import org.videolan.resources.TV_CONFIRMATION_ACTIVITY
 import org.videolan.resources.util.launchForeground
-import org.videolan.tools.*
+import org.videolan.tools.BitmapCache
+import org.videolan.tools.KEY_APP_THEME
+import org.videolan.tools.KEY_INCOGNITO
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.MultiSelectHelper
+import org.videolan.tools.Settings
+import org.videolan.tools.dp
+import org.videolan.tools.isStarted
+import org.videolan.tools.putSingle
+import org.videolan.tools.setGone
 import org.videolan.vlc.BuildConfig.VLC_VERSION_NAME
 import org.videolan.vlc.MediaParsingService
 import org.videolan.vlc.R
 import org.videolan.vlc.StartActivity
 import org.videolan.vlc.VlcMigrationHelper
-import org.videolan.vlc.gui.*
+import org.videolan.vlc.gui.AuthorsActivity
+import org.videolan.vlc.gui.BaseActivity
+import org.videolan.vlc.gui.FeedbackActivity
+import org.videolan.vlc.gui.InfoActivity
+import org.videolan.vlc.gui.LibrariesActivity
+import org.videolan.vlc.gui.LibraryWithLicense
 import org.videolan.vlc.gui.browser.MediaBrowserFragment
-import org.videolan.vlc.gui.dialogs.*
+import org.videolan.vlc.gui.dialogs.AboutVersionDialog
+import org.videolan.vlc.gui.dialogs.AddToGroupDialog
+import org.videolan.vlc.gui.dialogs.LicenseDialog
+import org.videolan.vlc.gui.dialogs.SavePlaylistDialog
+import org.videolan.vlc.gui.dialogs.VideoTracksDialog
 import org.videolan.vlc.gui.helpers.BitmapUtil.vectorToBitmap
 import org.videolan.vlc.gui.helpers.hf.PinCodeDelegate
 import org.videolan.vlc.gui.helpers.hf.checkPIN
@@ -303,9 +364,9 @@ object UiTools {
      * Print an on-screen message to alert the user, with undo action
      */
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    fun snackerConfirm(activity: Activity, message: String, overAudioPlayer: Boolean = false, @StringRes confirmMessage:Int = R.string.ok, action: () -> Unit) {
+    fun snackerConfirm(activity: Activity, message: String, overAudioPlayer: Boolean = false, @StringRes confirmMessage:Int = R.string.ok, indefinite:Boolean = false, action: () -> Unit) {
         val view = getSnackAnchorView(activity, overAudioPlayer) ?: return
-        val snack = Snackbar.make(view, message, Snackbar.LENGTH_LONG)
+        val snack = Snackbar.make(view, message, if (indefinite) Snackbar.LENGTH_INDEFINITE else Snackbar.LENGTH_LONG)
                 .setAction(confirmMessage) { action.invoke() }
         if (overAudioPlayer) snack.setAnchorView(R.id.time)
         if (VlcMigrationHelper.isLolliPopOrLater)
@@ -452,8 +513,11 @@ object UiTools {
         v.findViewById<View>(R.id.about_website_container).setOnClickListener {
             activity.openLinkIfPossible("https://www.videolan.org/vlc/")
         }
-        v.findViewById<View>(R.id.about_forum_container).setOnClickListener {
-            activity.openLinkIfPossible("https://forum.videolan.org/viewforum.php?f=35")
+//        v.findViewById<View>(R.id.about_forum_container).setOnClickListener {
+//            activity.openLinkIfPossible("https://forum.videolan.org/viewforum.php?f=35")
+//        }
+        v.findViewById<View>(R.id.about_report_container).setOnClickListener {
+            activity.startActivity(Intent(activity, FeedbackActivity::class.java))
         }
         v.findViewById<View>(R.id.about_sources_container).setOnClickListener {
             activity.openLinkIfPossible("https://code.videolan.org/videolan/vlc-android")
@@ -490,6 +554,28 @@ object UiTools {
 //    private fun manageDonationVisibility(activity: FragmentActivity, donationsButton:View) {
 //        if (VLCBilling.getInstance(activity.application).status == BillingStatus.FAILURE ||  VLCBilling.getInstance(activity.application).skuDetails.isEmpty()) donationsButton.setGone() else donationsButton.setVisible()
 //    }
+
+
+    /**
+     * Update the incognito mode setting
+     *
+     * @param activity the activity that launched the change
+     * @param item the menu item that was clicked
+     * @return true if the change has been applied, false otherwise
+     */
+    fun updateIncognitoMode(activity: FragmentActivity, item: MenuItem): Boolean {
+        if (activity.showPinIfNeeded()) return false
+        val settings = Settings.getInstance(activity)
+        settings.putSingle(KEY_INCOGNITO, !settings.getBoolean(KEY_INCOGNITO, false))
+        item.isChecked = !item.isChecked
+        if (!item.isChecked) {
+            settings.edit {
+                remove(KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE)
+                remove(KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE)
+            }
+        }
+        return true
+    }
 
     fun setKeyboardVisibility(v: View?, show: Boolean) {
         if (v == null) return
@@ -544,12 +630,11 @@ object UiTools {
         return false
     }
 
-    fun FragmentActivity.addToGroup(tracks: List<MediaWrapper>, forbidNewGroup:Boolean , newGroupListener: ()->Unit) {
+    fun FragmentActivity.addToGroup(tracks: List<MediaWrapper>, forbidNewGroup:Boolean) {
         if (!isStarted()) return
         val addToGroupDialog = AddToGroupDialog()
         addToGroupDialog.arguments = bundleOf(AddToGroupDialog.KEY_TRACKS to tracks.toTypedArray(), AddToGroupDialog.FORBID_NEW_GROUP to forbidNewGroup)
         addToGroupDialog.show(supportFragmentManager, "fragment_add_to_group")
-        addToGroupDialog.newGroupListener = newGroupListener
     }
 
     /**
