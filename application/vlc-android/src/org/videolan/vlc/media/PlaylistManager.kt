@@ -482,7 +482,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             0
         }
 
-        val mw = mediaList.getMedia(index) ?: return
+        val media = mediaList.getMedia(index) ?: return
+        val mw = medialibrary.getMedia(media.uri) ?: media
         val isInCustomPiP: Boolean = service.isInPiPMode.value ?: false
         if (mw.type == MediaWrapper.TYPE_VIDEO && !isAppStarted() && !isInCustomPiP) videoBackground = true
         val isVideoPlaying = mw.type == MediaWrapper.TYPE_VIDEO && player.isVideoPlaying()
@@ -840,7 +841,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         val media = getCurrentMedia()
         if (expand && media !== null) {
             expanding = true
-            nextIndex = expand(media.type == MediaWrapper.TYPE_STREAM)
+            nextIndex = expand(media.type == MediaWrapper.TYPE_STREAM, media.hasFlag(MediaWrapper.MEDIA_NO_PARSE))
             expanding = false
         } else {
             nextIndex = -1
@@ -917,7 +918,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
      * @return the index of the media was expanded, and -1 if no media was expanded
      */
     @MainThread
-    private suspend fun expand(updateHistory: Boolean): Int {
+    private suspend fun expand(updateHistory: Boolean, skipNextParsing:Boolean = false): Int {
         entryUrl = null
         if (BuildConfig.BETA) Log.d(TAG, "expand with values: ", Exception("Call stack"))
         val index = currentIndex
@@ -936,9 +937,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 if (isSchemeHttpOrHttps(child.uri.scheme) && child.uri.authority?.endsWith(".youtube.com") == true) {
                     shouldDisableCookieForwarding = true
                 }
-                withContext(Dispatchers.IO) { child.parse() }
+                if (!skipNextParsing)
+                    withContext(Dispatchers.IO) { child.parse() }
                 if (BuildConfig.BETA)  Log.d(TAG, "inserting: ${child.uri}")
-                mediaList.insert(index + i, MLServiceLocator.getAbstractMediaWrapper(child))
+                mediaList.insert(index + i, MLServiceLocator.getAbstractMediaWrapper(child).apply {
+                    if (skipNextParsing)
+                        addFlags(MediaWrapper.MEDIA_NO_PARSE)
+                })
                 child.release()
             }
             mediaList.addEventListener(this)
@@ -977,11 +982,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 mw.removeFlags(MediaWrapper.MEDIA_FROM_START)
                 0L
             }
-            savedTime <= 0L -> when {
-                mw.time > 0L -> mw.time
+            mw.time <= 0L -> when {
+                savedTime > 0L -> savedTime
                 else -> 0L
             }
-            else -> savedTime
+            else -> mw.time
         }
         savedTime = 0L
         return start

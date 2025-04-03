@@ -32,29 +32,23 @@ import android.text.InputFilter
 import android.text.InputType
 import android.util.Log
 import androidx.core.content.edit
-import androidx.preference.CheckBoxPreference
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
-import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.resources.VLCInstance
-import org.videolan.tools.AUDIO_DUCKING
 import org.videolan.tools.LocaleUtils
-import org.videolan.tools.RESUME_PLAYBACK
+import org.videolan.tools.LocaleUtils.getLocales
 import org.videolan.tools.Settings
-import org.videolan.tools.putSingle
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
-import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.browser.FilePickerActivity
 import org.videolan.vlc.gui.browser.KEY_PICKER_TYPE
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
-import org.videolan.vlc.isVLC4
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.LocaleUtil
@@ -82,28 +76,7 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        findPreference<Preference>("enable_headset_detection")?.isVisible = false
-        findPreference<Preference>("enable_play_on_headset_insertion")?.isVisible = false
-        findPreference<Preference>("ignore_headset_media_button_presses")?.isVisible = false
-        findPreference<Preference>("headset_prefs_category")?.isVisible = false
-        val aoutPref = findPreference<ListPreference>("aout")
-        findPreference<Preference>(RESUME_PLAYBACK)?.isVisible = false
-        findPreference<Preference>(AUDIO_DUCKING)?.isVisible = !AndroidUtil.isOOrLater
-
-        val aout = VlcMigrationHelper.getAudioOutputFromDevice()
-        if (aout != VlcMigrationHelper.AudioOutput.ALL) {
-            /* no AudioOutput choice */
-            aoutPref?.isVisible = false
-        }
-
-        if (isVLC4() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            aoutPref?.entryValues = activity.resources.getStringArray(R.array.aouts_complete_values)
-            aoutPref?.entries = activity.resources.getStringArray(R.array.aouts_complete)
-        }
-
         updatePassThroughSummary()
-        val opensles = "2" == preferenceManager.sharedPreferences!!.getString("aout", "0")
-        if (opensles) findPreference<Preference>("audio_digital_output")?.isVisible = false
         preferredAudioTrack = findPreference("audio_preferred_language")!!
         updatePreferredAudioTrack()
         prepareLocaleList()
@@ -145,12 +118,6 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (sharedPreferences == null || key == null) return
         when (key) {
-            "aout" -> {
-                launch { restartLibVLC() }
-                val opensles = "2" == preferenceManager.sharedPreferences!!.getString("aout", "0")
-                if (opensles) findPreference<CheckBoxPreference>("audio_digital_output")?.isChecked = false
-                findPreference<Preference>("audio_digital_output")?.isVisible = !opensles
-            }
             "audio_digital_output" -> updatePassThroughSummary()
             "audio_preferred_language" -> updatePreferredAudioTrack()
             "audio-replay-gain-enable", "audio-replay-gain-mode", "audio-replay-gain-peak-protection" -> launch { restartLibVLC() }
@@ -213,7 +180,7 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
     }
 
     private fun prepareLocaleList() {
-        val localePair = LocaleUtils.getLocalesUsedInProject(BuildConfig.TRANSLATION_ARRAY, getString(R.string.no_track_preference))
+        val localePair = LocaleUtils.getLocalesUsedInProject(BuildConfig.TRANSLATION_ARRAY, getString(R.string.no_track_preference), activity.getLocales())
         preferredAudioTrack.entries = localePair.localeEntries
         preferredAudioTrack.entryValues = localePair.localeEntryValues
     }

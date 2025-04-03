@@ -48,10 +48,11 @@ import org.videolan.resources.GROUP_VIDEOS_FOLDER
 import org.videolan.resources.GROUP_VIDEOS_NAME
 import org.videolan.resources.GROUP_VIDEOS_NONE
 import org.videolan.tools.setGone
-import org.videolan.tools.setVisible
 import org.videolan.vlc.R
 import org.videolan.vlc.databinding.DialogDisplaySettingsBinding
 import org.videolan.vlc.databinding.SortDisplaySettingBinding
+import org.videolan.vlc.gui.dialogs.DisplaySettingsDialog.VideoGroup.values
+import org.videolan.vlc.gui.helpers.DefaultPlaybackAction
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
 import org.videolan.vlc.viewmodels.DisplaySettingsViewModel
 import org.videolan.vlc.viewmodels.mobile.VideoGroupingType
@@ -67,6 +68,9 @@ const val CURRENT_SORT = "current_sort"
 const val CURRENT_SORT_DESC = "current_sort_desc"
 const val SHOW_ONLY_MULTIMEDIA_FILES = "show_only_multimedia_files"
 const val SHOW_HIDDEN_FILES = "show_hidden_files"
+const val SHOW_TRACK_NUMBER = "show_track_number"
+const val DEFAULT_ACTIONS = "default_actions"
+const val DEFAULT_ACTION_TYPE = "default_action_type"
 
 /**
  * Dialog showing the display settings for a media list (audio video)
@@ -74,7 +78,7 @@ const val SHOW_HIDDEN_FILES = "show_hidden_files"
 class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
 
     //current values
-    private var displayInCards: Boolean = false
+    private var displayInCards: Boolean? = null
     private var onlyFavs: Boolean? = null
     private lateinit var sorts: ArrayList<Int>
     private var currentSort: Int = -1
@@ -82,7 +86,11 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
     private var showAllArtists: Boolean? = null
     private var showOnlyMultimediaFiles: Boolean? = null
     private var showHiddenFiles: Boolean? = null
+    private var showTrackNumbers: Boolean? = null
     private var showVideoGroups: String? = null
+    private var defaultPlaybackActions: List<DefaultPlaybackAction>? = null
+    private var defaultActionType: String? = null
+    private var currentDefaultAction: DefaultPlaybackAction? = null
 
     private lateinit var binding: DialogDisplaySettingsBinding
 
@@ -90,13 +98,17 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
 
     companion object {
 
-        fun newInstance(displayInCards: Boolean, showAllArtists: Boolean? = null, onlyFavs: Boolean?, sorts: List<Int>, currentSort: Int, currentSortDesc: Boolean, videoGroup: String? = null, showOnlyMultimediaFiles:Boolean? = null, showHiddenFiles:Boolean? = null): DisplaySettingsDialog {
+        fun newInstance(displayInCards: Boolean?, showAllArtists: Boolean? = null, onlyFavs: Boolean?, sorts: List<Int>, currentSort: Int, currentSortDesc: Boolean, videoGroup: String? = null, showOnlyMultimediaFiles:Boolean? = null, showTrackNumber:Boolean? = null, showHiddenFiles:Boolean? = null, defaultPlaybackActions: List<DefaultPlaybackAction>? = null, defaultActionType: String? = null): DisplaySettingsDialog {
             return DisplaySettingsDialog().apply {
-                arguments = bundleOf(DISPLAY_IN_CARDS to displayInCards, SORTS to sorts, CURRENT_SORT to currentSort, CURRENT_SORT_DESC to currentSortDesc, VIDEO_GROUPING to videoGroup)
+                arguments = bundleOf(SORTS to sorts, CURRENT_SORT to currentSort, CURRENT_SORT_DESC to currentSortDesc, VIDEO_GROUPING to videoGroup)
+                if (displayInCards != null) arguments!!.putBoolean(DISPLAY_IN_CARDS, displayInCards)
                 if (onlyFavs != null) arguments!!.putBoolean(ONLY_FAVS, onlyFavs)
                 if (showAllArtists != null) arguments!!.putBoolean(SHOW_ALL_ARTISTS, showAllArtists)
                 if (showOnlyMultimediaFiles != null) arguments!!.putBoolean(SHOW_ONLY_MULTIMEDIA_FILES, showOnlyMultimediaFiles)
+                if (showTrackNumber != null) arguments!!.putBoolean(SHOW_TRACK_NUMBER, showTrackNumber)
                 if (showHiddenFiles != null) arguments!!.putBoolean(SHOW_HIDDEN_FILES, showHiddenFiles)
+                if (defaultPlaybackActions != null) arguments!!.putStringArrayList(DEFAULT_ACTIONS, ArrayList(defaultPlaybackActions.map { it.name }))
+                if(defaultActionType != null) arguments!!.putString(DEFAULT_ACTION_TYPE, defaultActionType)
             }
         }
     }
@@ -114,8 +126,7 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         lifecycleScope.launch { if (requireActivity().showPinIfNeeded()) dismiss() }
         super.onCreate(savedInstanceState)
-        displayInCards = arguments?.getBoolean(DISPLAY_IN_CARDS)
-                ?: throw IllegalStateException("Display in list should be provided")
+        displayInCards =if (arguments?.containsKey(DISPLAY_IN_CARDS) == true)  arguments?.getBoolean(DISPLAY_IN_CARDS) else null
         onlyFavs = if (arguments?.containsKey(ONLY_FAVS) == true) arguments?.getBoolean(ONLY_FAVS) else null
         sorts = arguments?.getIntegerArrayList(SORTS)
                 ?: throw IllegalStateException("Sorts should be provided")
@@ -125,8 +136,15 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
                 ?: throw IllegalStateException("Current sort desc should be provided")
         showAllArtists = if (arguments?.containsKey(SHOW_ALL_ARTISTS) == true) arguments?.getBoolean(SHOW_ALL_ARTISTS) else null
         showOnlyMultimediaFiles = if (arguments?.containsKey(SHOW_ONLY_MULTIMEDIA_FILES) == true) arguments?.getBoolean(SHOW_ONLY_MULTIMEDIA_FILES) else null
+        showTrackNumbers = if (arguments?.containsKey(SHOW_TRACK_NUMBER) == true) arguments?.getBoolean(SHOW_TRACK_NUMBER) else null
         showHiddenFiles = if (arguments?.containsKey(SHOW_HIDDEN_FILES) == true) arguments?.getBoolean(SHOW_HIDDEN_FILES) else null
         showVideoGroups = arguments?.getString(VIDEO_GROUPING, null)
+        val defaultActionsKeys = arguments?.getStringArrayList(DEFAULT_ACTIONS)?.toTypedArray()
+        defaultPlaybackActions = when(defaultActionsKeys) {
+            null -> null
+            else -> DefaultPlaybackAction.entries.filter { defaultActionsKeys.contains(it.name) }
+        }
+        defaultActionType = arguments?.getString(DEFAULT_ACTION_TYPE)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -140,13 +158,15 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
         updateShowAllArtists()
         updateShowOnlyFavs()
         updateShowAllFiles()
+        updateShowTrackNumbers()
         updateShowHiddenFiles()
         updateSorts()
+        updateDefaultActions()
 
         binding.displayModeGroup.setOnClickListener {
-            displayInCards = !displayInCards
+            displayInCards = !displayInCards!!
             updateDisplayMode()
-            lifecycleScope.launch { displaySettingsViewModel.send(DISPLAY_IN_CARDS, displayInCards) }
+            lifecycleScope.launch { displaySettingsViewModel.send(DISPLAY_IN_CARDS, displayInCards!!) }
         }
         binding.showAllArtistGroup.setOnClickListener {
             binding.showAllArtistCheckbox.isChecked = !binding.showAllArtistCheckbox.isChecked
@@ -175,6 +195,16 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
             showOnlyMultimediaFiles = isChecked
             updateShowAllFiles()
             lifecycleScope.launch { displaySettingsViewModel.send(SHOW_ONLY_MULTIMEDIA_FILES, showOnlyMultimediaFiles!!) }
+        }
+
+        binding.showTrackNumbersGroup.setOnClickListener {
+            binding.showTrackNumbersCheckbox.isChecked = !binding.showTrackNumbersCheckbox.isChecked
+        }
+
+        binding.showTrackNumbersCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            showTrackNumbers = isChecked
+            updateShowTrackNumbers()
+            lifecycleScope.launch { displaySettingsViewModel.send(SHOW_TRACK_NUMBER, showTrackNumbers!!) }
         }
 
         binding.onlyFavsGroup.setOnClickListener {
@@ -213,6 +243,30 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+
+        //Default actions
+        defaultPlaybackActions?.let {
+            val defaultActionsArrayAdapter = ArrayAdapter(requireActivity(), android.R.layout.simple_spinner_item, it)
+
+            defaultActionsArrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            binding.defaultActionsSpinner.adapter = defaultActionsArrayAdapter
+            binding.defaultActionsGroup.setOnClickListener {
+                binding.defaultActionsSpinner.performClick()
+            }
+            currentDefaultAction = it.find { it.selected }
+            binding.defaultActionsSpinner.setSelection(it.indexOf(currentDefaultAction))
+            binding.defaultActionsSpinner.onItemSelectedListener = object : OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    val defaultPlaybackAction = defaultActionsArrayAdapter.getItem(position) as DefaultPlaybackAction
+                    if (defaultPlaybackAction != currentDefaultAction) {
+                        lifecycleScope.launch { displaySettingsViewModel.send(DEFAULT_ACTIONS, defaultPlaybackAction) }
+                        currentDefaultAction = defaultPlaybackAction
+                    }
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+        }
     }
 
     /**
@@ -220,8 +274,14 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
      *
      */
     private fun updateDisplayMode() {
-        binding.displayInListText.text = getString(if (!displayInCards) R.string.display_in_grid else R.string.display_in_list)
-        binding.displayInListImage.setImageDrawable(ContextCompat.getDrawable(requireActivity(), if (!displayInCards) R.drawable.ic_view_grid else R.drawable.ic_view_list))
+        if (displayInCards == null) {
+            binding.displayInListText.setGone()
+            binding.displayInListImage.setGone()
+            binding.displayModeGroup.setGone()
+            return
+        }
+        binding.displayInListText.text = getString(if (displayInCards == false) R.string.display_in_grid else R.string.display_in_list)
+        binding.displayInListImage.setImageDrawable(ContextCompat.getDrawable(requireActivity(), if (displayInCards == false) R.drawable.ic_view_grid else R.drawable.ic_view_list))
     }
 
     /**
@@ -255,6 +315,21 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
     }
 
     /**
+     * Update the view for the "show track numbers" item
+     *
+     */
+    private fun updateShowTrackNumbers() {
+        if (showTrackNumbers == null) {
+            binding.showTrackNumbersGroup.setGone()
+            binding.showTrackNumbersImage.setGone()
+            binding.showTrackNumbersCheckbox.setGone()
+            binding.showTrackNumbersCheckbox.setGone()
+            return
+        }
+        binding.showTrackNumbersCheckbox.isChecked = showTrackNumbers!!
+    }
+
+    /**
      * Update the view for the "show hidden files" item
      *
      */
@@ -279,6 +354,20 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
             binding.onlyFavsImage.setGone()
             binding.onlyFavsText.setGone()
         } else binding.onlyFavsCheckbox.isChecked = onlyFavs!!
+    }
+
+    /**
+     * Update the view for the "default actions" item
+     *
+     */
+    private fun updateDefaultActions() {
+        if (defaultPlaybackActions == null) {
+            binding.defaultActionsGroup.setGone()
+            binding.defaultActionsImage.setGone()
+            binding.defaultActionsText.setGone()
+            binding.defaultActionsSpinner.setGone()
+        }
+        binding.defaultActionsSubtitle.text = defaultActionType
     }
 
     /**
@@ -310,6 +399,7 @@ class DisplaySettingsDialog : VLCBottomSheetDialogFragment() {
                 }
                 val isCurrentSort = (sort == currentSort || currentSort == Medialibrary.SORT_DEFAULT && sort == Medialibrary.SORT_ALPHA)
                 when (sort) {
+                    Medialibrary.TrackId -> setupSortViews(binding, isCurrentSort, R.string.sortby_track, R.string.ascending, R.string.descending, R.drawable.ic_sort_track)
                     Medialibrary.SORT_ALPHA -> setupSortViews(binding, isCurrentSort, R.string.sortby_name, R.string.sort_alpha_asc, R.string.sort_alpha_desc, R.drawable.ic_sort_alpha)
                     Medialibrary.SORT_FILENAME -> setupSortViews(binding, isCurrentSort, R.string.sortby_filename, R.string.sort_alpha_asc, R.string.sort_alpha_desc, R.drawable.ic_sort_filename)
                     Medialibrary.SORT_ARTIST -> setupSortViews(binding, isCurrentSort, R.string.sortby_artist_name, R.string.sort_alpha_asc, R.string.sort_alpha_desc, R.drawable.ic_sort_artist)

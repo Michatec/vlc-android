@@ -697,7 +697,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 + (if (settings.getBoolean(ENABLE_SWIPE_SEEK, true)) TOUCH_FLAG_SWIPE_SEEK else 0)
                 + (if (settings.getString(SCREENSHOT_MODE, "0") in arrayOf("2", "3")) TOUCH_FLAG_SCREENSHOT else 0)
                 + (if (settings.getBoolean(ENABLE_SCALE_GESTURE, true)) TOUCH_FLAG_SCALE else 0)
-                + (if (settings.getBoolean(ENABLE_FASTPLAY, false)) TOUCH_FLAG_FASTPLAY else 0))
+                + (if (settings.getBoolean(ENABLE_FASTPLAY, false) && PlaybackService.renderer.value == null) TOUCH_FLAG_FASTPLAY else 0))
     } else 0
 
     override fun fireDialog(dialog: Dialog) {
@@ -751,7 +751,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
         if (isLocked && !orientationMode.locked) requestedOrientation = orientationMode.orientation
         overlayDelegate.updateOrientationIcon()
-        arrayOf(FADE_OUT_VOLUME_INFO, FADE_OUT_BRIGHTNESS_INFO, FADE_OUT, FADE_OUT_INFO).forEach {
+        arrayOf(FADE_OUT_VOLUME_INFO, FADE_OUT_BRIGHTNESS_INFO, FADE_OUT, FADE_OUT_INFO, FADE_OUT_SCREENSHOT).forEach {
             handler.removeMessages(it)
             handler.sendEmptyMessage(it)
         }
@@ -820,7 +820,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             if (playlistModel == null) outState.putParcelable(KEY_URI, videoUri)
         }
         val mediaList = service?.playlistManager?.getMediaList() ?: savedMediaList
-        val mediaIndex = service?.playlistManager?.currentIndex ?: 0
+        val mediaIndex = service?.playlistManager?.currentIndex ?: savedMediaIndex
         if (mediaList != null) {
             outState.putParcelableArrayList(KEY_MEDIA_LIST, ArrayList(mediaList))
             outState.putInt(KEY_MEDIA_INDEX, mediaIndex)
@@ -960,23 +960,25 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     override fun onStop() {
         super.onStop()
-        service?.playlistManager?.getMediaList()?.let {
-            savedMediaList = ArrayList(it)
+        service?.playlistManager?.let {
+            savedMediaList = ArrayList(it.getMediaList())
+            savedMediaIndex = it.currentIndex
         }
         startedScope.cancel()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(serviceReceiver)
 
         unregisterReceiver(btReceiver)
         alertDialog?.dismiss()
+        val isPlayingPopup = service?.isPlayingPopup ?: false
+        val isSystemPip = (service?.isInPiPMode?.value ?: false) && !isPlayingPopup
         if (displayManager.isPrimary && !isFinishing && service?.isPlaying == true
-                && "1" == settings.getString(KEY_VIDEO_APP_SWITCH, "0") && !PlaybackService.hasRenderer()) {
+                && "1" == settings.getString(KEY_VIDEO_APP_SWITCH, "0") && !PlaybackService.hasRenderer()
+                && ((!isSystemPip && isInteractive) || (isSystemPip && !isInteractive))) {
             switchToAudioMode(false)
         }
-
         cleanUI()
         stopPlayback()
         service?.playlistManager?.videoStatsOn?.postValue(false)
-        val isPlayingPopup = service?.isPlayingPopup ?: false
         if (isInteractive && !isPlayingPopup)
             service?.isInPiPMode?.value = false
 
@@ -1152,7 +1154,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                                 }
                                 val coords = IntArray(2)
                                 surfaceView.getLocationOnScreen(coords)
-                                if (BitmapUtil.saveOnDisk(bitmap, dst.absolutePath))
+                                if (BitmapUtil.saveOnDisk(bitmap, dst.absolutePath, publish = true, context = this@VideoPlayerActivity))
                                     screenshotDelegate.takeScreenshot(dst, bitmap, coords, surface.width, surface.height)
                                 else
                                     UiTools.snacker(this@VideoPlayerActivity, R.string.screenshot_error)
@@ -1721,7 +1723,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             wasPaused = false
         }
         setESTracks()
-        if (overlayDelegate.isHudRightBindingInitialized() && overlayDelegate.hudRightBinding.playerOverlayTitle.length() == 0)
+        if (overlayDelegate.isHudRightBindingInitialized() && (overlayDelegate.hudRightBinding.playerOverlayTitle.length() == 0 || PlaybackService.hasRenderer()))
             overlayDelegate.setTitle(mw.title)
         // Get possible subtitles
         observeDownloadedSubtitles()

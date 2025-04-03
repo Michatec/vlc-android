@@ -81,10 +81,10 @@ import org.videolan.resources.util.parcelableList
 import org.videolan.tools.BROWSER_DISPLAY_IN_CARDS
 import org.videolan.tools.BROWSER_SHOW_HIDDEN_FILES
 import org.videolan.tools.BROWSER_SHOW_ONLY_MULTIMEDIA
+import org.videolan.tools.KEY_QUICK_PLAY
+import org.videolan.tools.KEY_QUICK_PLAY_DEFAULT
 import org.videolan.tools.KeyHelper
 import org.videolan.tools.MultiSelectHelper
-import org.videolan.tools.PLAYLIST_MODE_AUDIO
-import org.videolan.tools.PLAYLIST_MODE_VIDEO
 import org.videolan.tools.Settings
 import org.videolan.tools.dp
 import org.videolan.tools.isStarted
@@ -102,6 +102,7 @@ import org.videolan.vlc.gui.dialogs.CONFIRM_RENAME_DIALOG_RESULT
 import org.videolan.vlc.gui.dialogs.CURRENT_SORT
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
 import org.videolan.vlc.gui.dialogs.CtxActionReceiver
+import org.videolan.vlc.gui.dialogs.DEFAULT_ACTIONS
 import org.videolan.vlc.gui.dialogs.DISPLAY_IN_CARDS
 import org.videolan.vlc.gui.dialogs.DisplaySettingsDialog
 import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
@@ -111,6 +112,8 @@ import org.videolan.vlc.gui.dialogs.SHOW_HIDDEN_FILES
 import org.videolan.vlc.gui.dialogs.SHOW_ONLY_MULTIMEDIA_FILES
 import org.videolan.vlc.gui.dialogs.SavePlaylistDialog
 import org.videolan.vlc.gui.dialogs.showContext
+import org.videolan.vlc.gui.helpers.DefaultPlaybackAction
+import org.videolan.vlc.gui.helpers.DefaultPlaybackActionMediaType
 import org.videolan.vlc.gui.helpers.MedialibraryUtils
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
@@ -139,6 +142,8 @@ import org.videolan.vlc.util.ContextOption.CTX_INFORMATION
 import org.videolan.vlc.util.ContextOption.CTX_PLAY
 import org.videolan.vlc.util.ContextOption.CTX_PLAY_ALL
 import org.videolan.vlc.util.ContextOption.CTX_PLAY_AS_AUDIO
+import org.videolan.vlc.util.ContextOption.CTX_PLAY_NEXT
+import org.videolan.vlc.util.ContextOption.CTX_QUICK_PLAY
 import org.videolan.vlc.util.ContextOption.CTX_RENAME
 import org.videolan.vlc.util.FlagSet
 import org.videolan.vlc.util.LifecycleAwareScheduler
@@ -296,8 +301,7 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
         }
         requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_DELETE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
             val items: List<MediaWrapper> = bundle.parcelableList(CONFIRM_DELETE_DIALOG_MEDIALIST) ?: listOf()
-            if (items.isNotEmpty()) {
-                val mw = items[0]
+            items.forEach { mw ->
                 val deleteAction = Runnable {
                     lifecycleScope.launch {
                         MediaUtils.deleteItem(requireActivity(), mw) { viewModel.refresh() }
@@ -350,6 +354,9 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
             SHOW_ONLY_MULTIMEDIA_FILES -> {
                 Settings.getInstance(requireActivity()).putSingle(BROWSER_SHOW_ONLY_MULTIMEDIA, (value as Boolean))
                 viewModel.updateShowAllFiles(value)
+            }
+            DEFAULT_ACTIONS -> {
+                Settings.getInstance(requireActivity()).putSingle(DefaultPlaybackActionMediaType.FILE.defaultActionKey, (value as DefaultPlaybackAction).name)
             }
         }
     }
@@ -662,15 +669,17 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
 
                 //Open the display settings Bottom sheet
                 DisplaySettingsDialog.newInstance(
-                        displayInCards = inCards,
-                        onlyFavs = null,
-                        sorts = sorts,
-                        currentSort = viewModel.provider.sort.takeIf { it != 0 } ?: Medialibrary.SORT_FILENAME,
-                        currentSortDesc = viewModel.provider.desc,
-                        showOnlyMultimediaFiles = settings.getBoolean(BROWSER_SHOW_ONLY_MULTIMEDIA, false),
-                        showHiddenFiles = settings.getBoolean(BROWSER_SHOW_HIDDEN_FILES, true)
+                    displayInCards = inCards,
+                    onlyFavs = null,
+                    sorts = sorts,
+                    currentSort = viewModel.provider.sort.takeIf { it != 0 } ?: Medialibrary.SORT_FILENAME,
+                    currentSortDesc = viewModel.provider.desc,
+                    showOnlyMultimediaFiles = settings.getBoolean(BROWSER_SHOW_ONLY_MULTIMEDIA, false),
+                    showHiddenFiles = settings.getBoolean(BROWSER_SHOW_HIDDEN_FILES, true),
+                    defaultPlaybackActions = DefaultPlaybackActionMediaType.FILE.getDefaultPlaybackActions(settings),
+                    defaultActionType = getString(R.string.files)
                 )
-                        .show(requireActivity().supportFragmentManager, "DisplaySettingsDialog")
+                    .show(requireActivity().supportFragmentManager, "DisplaySettingsDialog")
                 true
             }
 
@@ -733,16 +742,25 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
             mediaWrapper.removeFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
             if (mediaWrapper.type == MediaWrapper.TYPE_DIR) browse(mediaWrapper, true)
             else {
-                val forcePlayType = if (mediaWrapper.type == MediaWrapper.TYPE_AUDIO) PLAYLIST_MODE_AUDIO else PLAYLIST_MODE_VIDEO
-                if (!Settings.getInstance(requireContext()).getBoolean(forcePlayType, forcePlayType == PLAYLIST_MODE_VIDEO && Settings.tvUI)) {
-                    lifecycleScope.launch {
-                        MediaUtils.openMedia(requireContext(), getMediaWithMeta(item))
+                lifecycleScope.launch {
+                    val media = getMediaWithMeta(item).apply {
+                        if (Settings.getInstance(requireActivity()).getBoolean(KEY_QUICK_PLAY_DEFAULT, false))
+                            addFlags(MediaWrapper.MEDIA_NO_PARSE)
                     }
-                } else {
-                    lifecycleScope.launch {
-                        val media = viewModel.dataset.getList().filter { it.itemType != MediaWrapper.TYPE_DIR }
-                                .map { getMediaWithMeta(it as MediaWrapper) }
-                        MediaUtils.openList(v.context, media, position)
+                    when (DefaultPlaybackActionMediaType.FILE.getCurrentPlaybackAction(Settings.getInstance(requireActivity()))) {
+                        DefaultPlaybackAction.PLAY -> MediaUtils.openMedia(requireContext(), getMediaWithMeta(media))
+                        DefaultPlaybackAction.ADD_TO_QUEUE -> MediaUtils.appendMedia(activity, media)
+                        DefaultPlaybackAction.INSERT_NEXT -> MediaUtils.insertNext(activity, media)
+                        else -> {
+                            val media = viewModel.dataset.getList().filter { it.itemType != MediaWrapper.TYPE_DIR }
+                                .map {
+                                    getMediaWithMeta(it as MediaWrapper).apply {
+                                        if (Settings.getInstance(requireActivity()).getBoolean(KEY_QUICK_PLAY_DEFAULT, false))
+                                            addFlags(MediaWrapper.MEDIA_NO_PARSE)
+                                    }
+                                }
+                            MediaUtils.openList(v.context, media, position)
+                        }
                     }
                 }
             }
@@ -768,6 +786,7 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
             val flags = FlagSet(ContextOption::class.java).apply {
                 add(CTX_RENAME)
                 if (!isRootDirectory && this@BaseBrowserFragment is FileBrowserFragment) add(CTX_DELETE)
+                if (!isRootDirectory && this@BaseBrowserFragment is FileBrowserFragment && Settings.getInstance(requireActivity()).getBoolean(KEY_QUICK_PLAY, false)) add(CTX_QUICK_PLAY)
                 if (!isRootDirectory && this is FileBrowserFragment) add(CTX_DELETE)
                 if (mw.type == MediaWrapper.TYPE_DIR) {
                     val isEmpty = viewModel.isFolderEmpty(mw)
@@ -795,6 +814,7 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
                     if (!isMedia) add(CTX_PLAY)
                     if (isVideo) add(CTX_DOWNLOAD_SUBTITLES)
                 }
+                add(CTX_PLAY_NEXT)
             }
             if (flags.isNotEmpty()) showContext(requireActivity(), this@BaseBrowserFragment, position, item, flags)
         }
@@ -820,6 +840,11 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
                 ?: return
         when (option) {
             CTX_PLAY -> lifecycleScope.launch { MediaUtils.openMedia(activity, getMediaWithMeta(mw)) }
+            CTX_QUICK_PLAY -> lifecycleScope.launch {
+                val mediaWithMeta = getMediaWithMeta(mw)
+                mediaWithMeta.addFlags(0x40)
+                MediaUtils.openMedia(activity, mediaWithMeta)
+            }
             CTX_PLAY_ALL -> {
                 mw.removeFlags(MediaWrapper.MEDIA_FORCE_AUDIO)
                 playAll(mw)
@@ -827,6 +852,10 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
 
             CTX_APPEND -> lifecycleScope.launch {
                 MediaUtils.appendMedia(activity, getMediaWithMeta(mw))
+            }
+
+            CTX_PLAY_NEXT -> lifecycleScope.launch {
+                MediaUtils.insertNext(activity, getMediaWithMeta(mw))
             }
 
             CTX_DELETE -> removeItem(mw)

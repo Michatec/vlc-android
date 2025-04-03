@@ -95,6 +95,15 @@
                 android:key="opengl"
                 android:summary="@string/opengl_summary"
                 android:title="@string/opengl_title"/>
+
+        <ListPreference
+                android:defaultValue="0"
+                android:entries="@array/aouts"
+                android:entryValues="@array/aouts_values"
+                android:key="aout"
+                android:summary="@string/aout_summary"
+                android:title="@string/aout"/>
+
         <ListPreference
                 android:defaultValue="-1"
                 android:entries="@array/deblocking_list"
@@ -114,6 +123,19 @@
             android:key="dav1d_thread_number"
             app:useSimpleSummaryProvider="true"
             android:title="@string/dav1d_thread_number"/>
+        <CheckBoxPreference
+                app:singleLineTitle="false"
+                android:defaultValue="false"
+                android:key="quick_play"
+                android:summary="@string/browser_quick_play_summary"
+                android:title="@string/browser_quick_play"/>
+        <CheckBoxPreference
+                app:singleLineTitle="false"
+                android:defaultValue="false"
+                android:key="quick_play_default"
+                android:dependency="quick_play"
+                android:summary="@string/browser_quick_play_default_summary"
+                android:title="@string/browser_quick_play_default"/>
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/developer_prefs_category">

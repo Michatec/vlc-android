@@ -39,6 +39,7 @@
     </plurals>
 
     <string name="play">Play</string>
+    <string name="quick_play">Quick play</string>
     <string name="playback">Playback</string>
     <string name="playback_controls">Playback controls</string>
     <string name="medialibrary_scan">Media library scan</string>
@@ -385,6 +386,7 @@
     <string name="save_brightness_title">Save brightness level</string>
     <string name="save_audiodelay_summary">Save individual audio delay for each video</string>
     <string name="save_audiodelay_title">Save audio delay</string>
+    <string name="video_show_orientation_button">Show orientation button</string>
     <string name="enable_brightness_gesture_title">Brightness gesture</string>
     <string name="enable_brightness_gesture_summary">Control brightness by gesture during video playback</string>
     <string name="enable_volume_gesture_title">Volume gesture</string>
@@ -608,6 +610,10 @@
     <string name="custom_libvlc_options_invalid">Invalid libVLC options!</string>
     <string name="dav1d_thread_number">Dav1d thread number</string>
     <string name="dav1d_thread_number_invalid">Invalid thread number! (>=1)</string>
+    <string name="browser_quick_play">Browser quick play menu</string>
+    <string name="browser_quick_play_summary">Add a quick play action in the browser items\' menu. It will load your media faster but some metadata may be missing</string>
+    <string name="browser_quick_play_default">Quick play as default action</string>
+    <string name="browser_quick_play_default_summary">If activated, taping a browser item will play it using quick play</string>
 
     <string name="serious_crash">Unfortunately, a serious error has occurred and VLC had to close.</string>
     <string name="help_us_send_log">Help us improving VLC by sending the following crash log:</string>
@@ -762,6 +768,7 @@
     <string name="episodes">episodes</string>
     <string name="movies">movies</string>
     <string name="videos">videos</string>
+    <string name="default_action_videos">Videos</string>
     <string name="videos_all">All videos</string>
     <string name="clear_playback_history">Clear playback history</string>
     <string name="ml_scanning">Scanning for media files</string>
@@ -914,6 +921,8 @@
     <string name="validation_delete_playlist_text">This action cannot be undone.</string>
     <string name="display_settings">Display settings</string>
     <string name="incognito_mode">Incognito mode</string>
+    <string name="persistent_incognito_mode">Persistent incognito mode</string>
+    <string name="persistent_incognito_mode_summary">Keep the incognito mode enabled even if the app is restarted</string>
     <string name="display_in_list">Display in list</string>
     <string name="display_in_grid">Display in grid</string>
     <string name="dump_db_succes">Database dumped on internal storage root</string>
@@ -1384,4 +1393,6 @@
     <string name="body">Message</string>
     <string name="rate_us">Rate the app</string>
     <string name="generating_logs">Generating logs. Please wait.</string>
+    <string name="default_playback_action">Playback action</string>
+    <string name="files">Files</string>
 </resources>

@@ -40,15 +40,15 @@ import androidx.core.content.edit
 import androidx.core.os.bundleOf
 import androidx.core.text.isDigitsOnly
 import androidx.fragment.app.FragmentActivity
-import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.CheckBoxPreference
 import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.medialibrary.interfaces.Medialibrary
-import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.resources.AndroidDevices
 import org.videolan.resources.EXPORT_SETTINGS_FILE
 import org.videolan.resources.KEY_AUDIO_LAST_PLAYLIST
@@ -63,18 +63,19 @@ import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST_RESUME
 import org.videolan.resources.ROOM_DATABASE
 import org.videolan.resources.SCHEME_PACKAGE
 import org.videolan.resources.VLCInstance
-import org.videolan.resources.util.parcelableList
 import org.videolan.tools.BitmapCache
 import org.videolan.tools.DAV1D_THREAD_NUMBER
+import org.videolan.tools.KEY_AOUT
+import org.videolan.tools.KEY_QUICK_PLAY
+import org.videolan.tools.KEY_QUICK_PLAY_DEFAULT
+import org.videolan.tools.RESULT_RESTART
 import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
-import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.DebugLogActivity
 import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.browser.FilePickerActivity
 import org.videolan.vlc.gui.browser.KEY_PICKER_TYPE
-import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_MEDIALIST
 import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT
 import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_VALUE
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
@@ -88,10 +89,9 @@ import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate.Companion.getWritePermission
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
 import org.videolan.vlc.gui.preferences.search.PreferenceParser
-import org.videolan.vlc.media.MediaUtils
+import org.videolan.vlc.isVLC4
 import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.AutoUpdate
-import org.videolan.vlc.util.FeatureFlag
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.share
 import java.io.File
@@ -111,14 +111,18 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (FeatureFlag.values().isNotEmpty()) findPreference<Preference>("optional_features")?.isVisible = true
 
         findPreference<EditTextPreference>("network_caching")?.setOnBindEditTextListener {
             it.inputType = InputType.TYPE_CLASS_NUMBER
             it.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(5))
             it.setSelection(it.editableText.length)
         }
-        if (!BuildConfig.DEBUG) findPreference<Preference>("show_update")?.isVisible  = false
+
+        val aoutPref = findPreference<ListPreference>(KEY_AOUT)
+        if (isVLC4() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            aoutPref?.entryValues = requireActivity().resources.getStringArray(R.array.aouts_complete_values)
+            aoutPref?.entries = requireActivity().resources.getStringArray(R.array.aouts_complete)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -332,6 +336,14 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
                 }
                 return true
             }
+            KEY_QUICK_PLAY -> {
+                val activity = activity
+                activity?.setResult(RESULT_RESTART)
+                if (!(preference as CheckBoxPreference).isChecked) {
+                    findPreference<CheckBoxPreference>(KEY_QUICK_PLAY_DEFAULT)?.isChecked = false
+                }
+                return true
+            }
             "restore_settings" -> {
                 val filePickerIntent = Intent(requireContext(), FilePickerActivity::class.java)
                 filePickerIntent.putExtra(KEY_PICKER_TYPE, PickerType.SETTINGS.ordinal)
@@ -366,6 +378,12 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (sharedPreferences == null || key == null) return
         when (key) {
+            KEY_AOUT -> {
+                lifecycleScope.launch { restartLibVLC() }
+                Settings.getInstance(requireActivity()).let {
+                    if (it.getString(KEY_AOUT, "0") == "2") it.putSingle("audio_digital_output", false)
+                }
+            }
             "network_caching" -> {
                 sharedPreferences.edit {
                     try {

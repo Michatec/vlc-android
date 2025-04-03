@@ -10,6 +10,7 @@ import androidx.core.content.edit
 import androidx.core.content.getSystemService
 import androidx.lifecycle.MutableLiveData
 import androidx.preference.PreferenceManager
+import org.videolan.tools.Settings.audioControlsChangeListener
 import org.videolan.tools.Settings.init
 
 object Settings : SingletonHolder<SharedPreferences, Context>({ init(it.applicationContext) }) {
@@ -121,6 +122,7 @@ const val KEY_AUDIO_SHOW_TRACK_NUMBERS = "audio_show_track_numbers"
 const val KEY_AUDIO_SHOW_CHAPTER_BUTTONS = "audio_show_chapter_buttons"
 const val KEY_AUDIO_SHOW_BOOkMARK_BUTTONS = "audio_show_bookmark_buttons"
 const val KEY_AUDIO_SHOW_BOOKMARK_MARKERS = "audio_show_bookmark_markers"
+const val KEY_PERSISTENT_INCOGNITO = "persistent_incognito"
 
 
 // AudioPlayer
@@ -183,6 +185,7 @@ const val SAVE_BRIGHTNESS = "save_brightness"
 const val BRIGHTNESS_VALUE = "brightness_value"
 const val POPUP_KEEPSCREEN = "popup_keepscreen"
 const val POPUP_FORCE_LEGACY = "popup_force_legacy"
+const val SHOW_ORIENTATION_BUTTON = "show_orientation_button"
 const val RESTORE_BACKGROUND_VIDEO = "restore_background_video"
 const val LOCK_USE_SENSOR = "lock_use_sensor"
 const val DISPLAY_UNDER_NOTCH = "display_under_notch"
@@ -244,6 +247,9 @@ const val NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
 const val PLAYLIST_REPLACE = "playlist_replace"
 const val HTTP_USER_AGENT = "http_user_agent"
 const val DAV1D_THREAD_NUMBER = "dav1d_thread_number"
+const val KEY_QUICK_PLAY = "quick_play"
+const val KEY_QUICK_PLAY_DEFAULT = "quick_play_default"
+const val KEY_AOUT = "aout"
 
 //files
 const val BROWSER_SHOW_HIDDEN_FILES = "browser_show_hidden_files"
