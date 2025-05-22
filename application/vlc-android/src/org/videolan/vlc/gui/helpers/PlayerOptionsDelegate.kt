@@ -3,6 +3,7 @@ package org.videolan.vlc.gui.helpers
 import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -207,8 +208,9 @@ class PlayerOptionsDelegate(val activity: FragmentActivity, val service: Playbac
             }
             ID_PLAY_AS_AUDIO -> (activity as VideoPlayerActivity).switchToAudioMode(true)
             ID_PLAY_AS_VIDEO -> {
-                val audioPlayerContainerActivity = activity as AudioPlayerContainerActivity
-                audioPlayerContainerActivity.audioPlayer.onResumeToVideoClick()
+                when {
+                    activity is PlayerOptionsDelegateCallback -> activity.onResumeToVideoClick()
+                }
             }
             ID_POPUP_VIDEO -> {
                 (activity as VideoPlayerActivity).switchToPopup()
@@ -448,6 +450,10 @@ class PlayerOptionsDelegate(val activity: FragmentActivity, val service: Playbac
             }
         }
     }
+}
+
+interface PlayerOptionsDelegateCallback {
+    fun onResumeToVideoClick()
 }
 
 data class PlayerOption(val id: Long, val icon: Int, val title: String)

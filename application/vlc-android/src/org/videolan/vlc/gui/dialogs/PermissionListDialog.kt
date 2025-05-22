@@ -38,7 +38,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
 import kotlinx.coroutines.launch
@@ -103,6 +102,7 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
 
     override fun onResume() {
         super.onResume()
+        Permissions.emptyCache()
         updateStorageState()
     }
 
@@ -154,10 +154,6 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
         // media permission states
         binding.manageMediaVideo.isEnabled = !Permissions.hasAllAccess(requireActivity()) && !Permissions.hasVideoPermission(requireActivity())
         binding.manageMediaAudio.isEnabled = !Permissions.hasAllAccess(requireActivity()) && !Permissions.hasAudioPermission(requireActivity())
-
-        //backgrounds
-        binding.manageMediaPermsCheck.setBackgroundResource(defaultBackground)
-
 
         // explanation text state
         binding.fileAccessExplanation.text = when {
@@ -293,7 +289,7 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
         }
 
         //Manage view visibility for older versions
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || AndroidDevices.isTv) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             binding.manageMediaPermsCheck.setGone()
             binding.manageMediaVideo.setGone()
             binding.manageMediaAudio.setGone()
@@ -305,7 +301,7 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
             binding.manageMediaVideo.setGone()
         }
 
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 || AndroidDevices.isTv) {
             binding.notificationPermissionContainer.setGone()
             binding.notificationPermissionTitle.setGone()
         }

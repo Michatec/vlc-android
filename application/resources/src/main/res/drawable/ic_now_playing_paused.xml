@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?><!--
+<!--
   ~ *************************************************************************
-  ~  standard_selection_grey900.xml
+  ~  ic_now_playing_paused.xml
   ~ **************************************************************************
-  ~ Copyright © 2020 VLC authors and VideoLAN
+  ~ Copyright © 2025 VLC authors and VideoLAN
   ~ Author: Nicolas POMEPUY
   ~ This program is free software; you can redistribute it and/or modify
   ~ it under the terms of the GNU General Public License as published by
@@ -22,10 +22,21 @@
   ~
   -->
 
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="?attr/colorPrimary" />
-    <item android:state_pressed="true" android:color="?attr/colorPrimary" />
-    <item android:state_focused="true" android:color="?attr/colorPrimary" />
-    <item android:state_enabled="false" android:color="?attr/font_disabled" />
-    <item android:color="?attr/colorControlNormal" />
-</selector>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="6"
+    android:viewportHeight="6">
+  <path
+      android:pathData="M1.148,5.25H2.207V6H1.148Z"
+      android:strokeWidth="0.561243"
+      android:fillColor="?attr/player_icon_color"/>
+  <path
+      android:pathData="M2.471,5.25H3.529V6H2.471Z"
+      android:strokeWidth="0.420927"
+      android:fillColor="?attr/player_icon_color"/>
+  <path
+      android:pathData="M3.794,5.25H4.852V6H3.794Z"
+      android:strokeWidth="0.59521"
+      android:fillColor="?attr/player_icon_color"/>
+</vector>

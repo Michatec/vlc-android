@@ -77,7 +77,7 @@ import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.browser.FilePickerActivity
 import org.videolan.vlc.gui.browser.KEY_PICKER_TYPE
 import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT
-import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_VALUE
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_TYPE
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
 import org.videolan.vlc.gui.dialogs.NEW_INSTALL
 import org.videolan.vlc.gui.dialogs.RenameDialog
@@ -128,7 +128,7 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_DELETE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
-            val reason = bundle.getInt(CONFIRM_DELETE_DIALOG_RESULT_VALUE)
+            val reason = bundle.getInt(CONFIRM_DELETE_DIALOG_RESULT_TYPE)
             when (reason) {
                 RESULT_VALUE_CLEAR_HISTORY -> {
                     Medialibrary.getInstance().clearHistory(Medialibrary.HISTORY_TYPE_GLOBAL)
@@ -228,7 +228,7 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
                 return true
             }
             "clear_history" -> {
-                val dialog = ConfirmDeleteDialog.newInstance(title = getString(R.string.clear_playback_history), description = getString(R.string.clear_history_message), buttonText = getString(R.string.clear_history), resultValue = RESULT_VALUE_CLEAR_HISTORY)
+                val dialog = ConfirmDeleteDialog.newInstance(title = getString(R.string.clear_playback_history), description = getString(R.string.clear_history_message), buttonText = getString(R.string.clear_history), resultType = RESULT_VALUE_CLEAR_HISTORY)
                 dialog.show((activity as FragmentActivity).supportFragmentManager, RenameDialog::class.simpleName)
                 return true
             }
@@ -247,7 +247,7 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
                         title = getString(R.string.clear_media_db),
                         description = getString(R.string.clear_media_db_message),
                         buttonText = getString(R.string.clear),
-                        resultValue = RESULT_VALUE_CLEAR_MEDIA_DATABASE
+                        resultType = RESULT_VALUE_CLEAR_MEDIA_DATABASE
                     )
                     dialog.show(
                         requireActivity().supportFragmentManager,
@@ -262,7 +262,7 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
                         title = getString(R.string.clear_app_data),
                         description = getString(R.string.clear_app_data_message),
                         buttonText = getString(R.string.clear),
-                        resultValue = RESULT_VALUE_CLEAR_APP_DATA
+                        resultType = RESULT_VALUE_CLEAR_APP_DATA
                     )
                     dialog.show(requireActivity().supportFragmentManager, RenameDialog::class.simpleName)
                 } else {

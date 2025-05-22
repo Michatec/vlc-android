@@ -176,7 +176,14 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
     }
 
     fun displayListInGrid(list: RecyclerView, adapter: AudioBrowserAdapter, provider: MedialibraryProvider<MediaLibraryItem>, spacing: Int) {
-        val gridLayoutManager = GridLayoutManager(requireActivity(), nbColumns)
+        val gridLayoutManager = object: GridLayoutManager(requireActivity(), nbColumns) {
+            override fun onLayoutCompleted(state: RecyclerView.State?) {
+                super.onLayoutCompleted(state)
+                lifecycleScope.launch {
+                    displaySettingsViewModel.lockSorts(false)
+                }
+            }
+        }
         gridLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
             override fun getSpanSize(position: Int): Int {
                 if (position == adapter.itemCount - 1) return 1
@@ -258,7 +265,14 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
                         provider
                     )
                 )
-                list.layoutManager = LinearLayoutManager(activity)
+                list.layoutManager = object: LinearLayoutManager(activity) {
+                    override fun onLayoutCompleted(state: RecyclerView.State?) {
+                        super.onLayoutCompleted(state)
+                        lifecycleScope.launch {
+                            displaySettingsViewModel.lockSorts(false)
+                        }
+                    }
+                }
             }
         }
         val lp = list.layoutParams
@@ -490,6 +504,7 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
         if (adapter == getCurrentAdapter()) {
             restoreMultiSelectHelper()
         }
+        displaySettingsViewModel.waitForUpdate = false
     }
 
     override fun onItemFocused(v: View, item: MediaLibraryItem) {}
@@ -542,6 +557,7 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
             CTX_ADD_SHORTCUT -> lifecycleScope.launch {requireActivity().createShortcut(media)}
             CTX_FAV_ADD, CTX_FAV_REMOVE -> lifecycleScope.launch {
                 withContext(Dispatchers.IO) { media.isFavorite = option == CTX_FAV_ADD }
+                withContext(Dispatchers.Main) { getCurrentAdapter()?.notifyItemChanged(position) }
             }
             CTX_RENAME -> {
                 if (media !is Playlist) return

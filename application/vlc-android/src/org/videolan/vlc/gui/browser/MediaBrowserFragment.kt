@@ -23,14 +23,15 @@
 package org.videolan.vlc.gui.browser
 
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.net.toUri
 import androidx.fragment.app.activityViewModels
-import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -38,8 +39,10 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.ChangeBounds
 import androidx.transition.TransitionManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.launch
 import org.videolan.medialibrary.interfaces.Medialibrary
+import org.videolan.medialibrary.interfaces.media.Folder
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.resources.util.parcelableList
@@ -48,13 +51,21 @@ import org.videolan.vlc.R
 import org.videolan.vlc.gui.BaseFragment
 import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_MEDIALIST
 import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_BAN_FOLDER
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_DEFAULT_VALUE
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT_TYPE
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
+import org.videolan.vlc.gui.helpers.MedialibraryUtils
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.fillActionMode
 import org.videolan.vlc.interfaces.Filterable
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.util.Permissions
-import org.videolan.vlc.viewmodels.*
+import org.videolan.vlc.viewmodels.DisplaySettingsViewModel
+import org.videolan.vlc.viewmodels.MedialibraryViewModel
+import org.videolan.vlc.viewmodels.SortableModel
+import org.videolan.vlc.viewmodels.prepareOptionsMenu
+import org.videolan.vlc.viewmodels.sortMenuTitles
 
 private const val TAG = "VLC/MediaBrowserFragment"
 private const val KEY_SELECTION = "key_selection"
@@ -69,7 +80,7 @@ abstract class MediaBrowserFragment<T : SortableModel> : BaseFragment(), Filtera
         duration = 300
     }
 
-    private val displaySettingsViewModel: DisplaySettingsViewModel by activityViewModels()
+    val displaySettingsViewModel: DisplaySettingsViewModel by activityViewModels()
 
     /**
      * Triggered when a display setting is changed
@@ -106,8 +117,43 @@ abstract class MediaBrowserFragment<T : SortableModel> : BaseFragment(), Filtera
         }
         requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_DELETE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
             val items: List<MediaLibraryItem> = bundle.parcelableList(CONFIRM_DELETE_DIALOG_MEDIALIST) ?: listOf()
-            for (item in items) {
-                MediaUtils.deleteItem(requireActivity(), item) { onDeleteFailed(it)}
+            val type = bundle.getInt(CONFIRM_DELETE_DIALOG_RESULT_TYPE)
+            if (type == CONFIRM_DELETE_DIALOG_RESULT_DEFAULT_VALUE) {
+                for (item in items) {
+                    items.forEach { mw ->
+                        if (mw is MediaWrapper) {
+                            val deleteAction = Runnable {
+                                lifecycleScope.launch {
+                                    MediaUtils.deleteItem(requireActivity(), mw) { viewModel.refresh() }
+                                    if (this@MediaBrowserFragment is FileBrowserFragment)
+                                        viewModel.remove(mw)
+                                }
+                            }
+                            if (Permissions.checkWritePermission(requireActivity(), (item as MediaWrapper), deleteAction)) deleteAction.run()
+                        } else MediaUtils.deleteItem(requireActivity(), item) { onDeleteFailed(it) }
+                    }
+                }
+            } else if (type == CONFIRM_DELETE_DIALOG_RESULT_BAN_FOLDER) {
+                items.forEach {
+                    val path = if (it is Folder) it.mMrl.toUri().path else if (it is MediaWrapper) it.uri.path else null
+                    path?.let { path ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val roots: Array<String> = Medialibrary.getInstance().foldersList
+                            val strippedPath = path.removePrefix("file://")
+                            for (root in roots) {
+                                if (root.removePrefix("file://") == strippedPath) {
+                                    Log.w(TAG, "banFolder: trying to ban root: $root")
+                                    lifecycleScope.launch(Dispatchers.Main) {
+                                        UiTools.snacker(requireActivity(), getString(R.string.cant_ban_root))
+                                    }
+                                    return@launch
+                                }
+                            }
+                            MedialibraryUtils.banDir(strippedPath)
+                        }
+
+                    } ?: Log.e(TAG, "banFolder: path is null")
+                }
             }
         }
 
